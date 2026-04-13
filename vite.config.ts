@@ -42,6 +42,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/ump-client-user-service'),
       },
+      '/ai': {
+        target: 'http://xxx.ga-ga.xyz:19080',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ai/, '/ump-client-ai-service'),
+      },
     },
   },
 })
