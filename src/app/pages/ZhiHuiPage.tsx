@@ -9,6 +9,7 @@ import {
   X, RotateCcw, Loader2, Clock,
   Archive, ZoomIn, Bookmark, BookmarkCheck,
 } from 'lucide-react';
+import { chatService } from '../services/chatService';
 
 // ── Mock Data ─────────────────────────────────────────────────────────────────
 
@@ -254,11 +255,112 @@ export function ZhiHuiPage() {
   const [zoomPattern, setZoomPattern]           = useState<GeneratedPattern | null>(null);
   const [sessions, setSessions]                 = useState<Session[]>(MOCK_SESSIONS);
   const [newSessionAnim, setNewSessionAnim]     = useState(false);
+  const [isStreaming, setIsStreaming]           = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLTextAreaElement>(null);
 
+  // AI 任务相关状态
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [assistantMsgId, setAssistantMsgId] = useState<string | null>(null);
+  const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const sseRef = useRef<{ close: () => void } | null>(null);
+
+  // MinIO 对象存储路径前缀
+  const IMAGE_BASE = '/api';
+  const getImageUrl = (objectKey: string): string => {
+    return `${IMAGE_BASE}/${objectKey}`;
+  };
+
+  // SSE 订阅逻辑
+  const subscribeToTask = (taskId: string, assistantMsgId: string) => {
+    sseRef.current?.close();
+
+    setGenState('generating');
+
+    sseRef.current = chatService.subscribeEvents(
+      taskId,
+      (msg) => {
+        switch (msg.type) {
+          case 'task.phase':
+            if (msg.phase === 'TEXT_GENERATING') {
+              setGenState('generating');
+            } else if (msg.phase === 'FINALIZING') {
+              setGenState('done');
+            }
+            break;
+
+          case 'message.delta':
+            setMessages(prev => prev.map(m =>
+              m.id === assistantMsgId
+                ? { ...m, content: m.content + (msg.delta || '') }
+                : m
+            ));
+            break;
+
+          case 'message.completed':
+            setGenState('done');
+            break;
+
+          case 'artifact.ready':
+            if (msg.objectKeys && msg.objectKeys.length > 0) {
+              const newPattern: GeneratedPattern = {
+                id: msg.requestId || `gen_${Date.now()}`,
+                title: msg.promptSummary || '生成纹样',
+                desc: msg.promptSummary || '',
+                tags: [selectedCategory],
+                style: 'AI生成',
+                scene: '智绘创作',
+                imageUrl: getImageUrl(msg.objectKey || msg.objectKeys[0]),
+              };
+              setPatterns(prev => [...prev, newPattern]);
+            }
+            break;
+
+          case 'task.completed':
+            setIsStreaming(false);
+            setGenState('done');
+            sseRef.current?.close();
+            if (msg.seq !== undefined) {
+              setLastEventId(`${Date.now()}-${msg.seq}`);
+            }
+            break;
+
+          case 'task.failed':
+            setIsStreaming(false);
+            setGenState('idle');
+            toast.error(msg.errorMessage || '生成失败');
+            sseRef.current?.close();
+            break;
+
+          case 'task.rejected':
+            setIsStreaming(false);
+            setGenState('idle');
+            toast.error(msg.displayText || '内容审核未通过');
+            sseRef.current?.close();
+            break;
+
+          case 'task.cancelled':
+            setIsStreaming(false);
+            setGenState('idle');
+            toast.info('任务已取消');
+            sseRef.current?.close();
+            break;
+        }
+      },
+      { lastEventId: lastEventId || undefined }
+    );
+  };
+
   useEffect(() => { clearRedDot('zhihui'); }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, patterns]);
+
+  // 组件卸载时清理 SSE 连接
+  useEffect(() => {
+    return () => {
+      sseRef.current?.close();
+    };
+  }, []);
 
   const isSavedGlobally = (id: string) => savedLibraryPatterns.some(p => p.id === id);
 
@@ -302,6 +404,13 @@ export function ZhiHuiPage() {
   };
 
   const handleNewSession = () => {
+    // 清理 SSE 连接和任务状态
+    sseRef.current?.close();
+    setCurrentTaskId(null);
+    setCurrentSessionId(null);
+    setIsStreaming(false);
+    setLastEventId(null);
+
     if (messages.length > 0 && activeSession === 'new') {
       const title = (messages[0]?.content.slice(0, 18) ?? '新创作') + (messages[0]?.content.length > 18 ? '…' : '');
       const newId = `s_${Date.now()}`;
@@ -324,27 +433,54 @@ export function ZhiHuiPage() {
   };
 
   const handleSend = async () => {
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() || isStreaming) return;
+
+    const clientMessageId = `local_${Date.now()}`;
+
     const userMsg: ConvMessage = {
-      id: Date.now().toString(), role: 'user', content: inputValue, category: selectedCategory,
+      id: clientMessageId,
+      role: 'user',
+      content: inputValue,
+      category: selectedCategory,
       timestamp: new Date().toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages(prev => [...prev, userMsg]);
     setInputValue('');
-    setGenState('analyzing');
 
-    for (const [step, delay] of [['analyzing', 900], ['matching', 1200], ['generating', 2000], ['done', 400]] as [GenState, number][]) {
-      await new Promise(r => setTimeout(r, delay));
-      setGenState(step);
-    }
-
+    // 添加空的 assistant 消息占位（使用 system role 保持 UI 兼容）
+    const assistantId = `assistant_${Date.now()}`;
     setMessages(prev => [...prev, {
-      id: (Date.now() + 1).toString(), role: 'system',
-      content: `已基于您的创作方向，结合「${selectedCategory}」品类工艺规则与可用授权纹样，生成以下 4 个方向。`,
+      id: assistantId,
+      role: 'system',
+      content: '',
       timestamp: new Date().toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }),
     }]);
-    setPatterns(MOCK_PATTERNS);
-    toast.success(t('生成完成，4 个方向可供选择', 'Generated!'));
+
+    setIsStreaming(true);
+    setGenState('analyzing');
+    setPatterns([]); // 清空之前的方案
+
+    try {
+      const res = await chatService.submitMessage({
+        sessionId: currentSessionId || undefined,
+        clientMessageId,
+        text: inputValue,
+      });
+
+      const { sessionId, taskId } = res.data;
+      setCurrentSessionId(sessionId);
+      setCurrentTaskId(taskId);
+      setAssistantMsgId(assistantId);
+
+      // 开始 SSE 订阅
+      subscribeToTask(taskId, assistantId);
+
+    } catch (err: any) {
+      setIsStreaming(false);
+      setGenState('idle');
+      toast.error(err.message || '提交失败');
+      setMessages(prev => prev.filter(m => m.id !== assistantId));
+    }
   };
 
   const handleRegen = (pattern: GeneratedPattern) => {
