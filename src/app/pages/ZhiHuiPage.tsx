@@ -509,10 +509,15 @@ export function ZhiHuiPage() {
     setPatterns([]); // 清空之前的方案
 
     try {
+      // 将分类 id 转为 imageStyle 格式（如 yunjin -> yun_jin）
+      const selectedCat = CATEGORIES.find(c => c.name === selectedCategory);
+      const imageStyle = selectedCat?.enabled ? selectedCat.id.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase() : undefined;
+
       const res = await chatService.submitMessage({
         sessionId: currentSessionId || undefined,
         clientMessageId,
         text: inputValue,
+        imageStyle,
       });
 
       const { sessionId, taskId } = res.data;
