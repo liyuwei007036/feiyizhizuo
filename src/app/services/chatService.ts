@@ -154,6 +154,18 @@ async function request<T>(
     },
   });
 
+  // 检查 HTTP 状态码
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const errData = await response.json();
+      message = errData.message || message;
+    } catch {
+      // 非 JSON 响应，使用状态码消息
+    }
+    throw new Error(message);
+  }
+
   const data = await response.json();
 
   if (data.code !== 0 && data.code !== 200) {
@@ -374,7 +386,7 @@ export const chatService = {
             sessionId: '',
             occurredAt: new Date().toISOString(),
             seq: 0,
-            errorMessage: err.message,
+            errorMessage: (err as Error).message || String(err),
           });
         }
       });
