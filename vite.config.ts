@@ -37,9 +37,10 @@ export default defineConfig({
   // API 代理配置
   server: {
     proxy: {
-      '/ump-client-user-service': {
+      '/api': {
         target: 'http://xxx.ga-ga.xyz:19080',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '/ump-client-user-service'),
       },
     },
   },

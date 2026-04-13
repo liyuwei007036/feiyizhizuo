@@ -1,6 +1,6 @@
 // src/app/services/authService.ts
 
-const API_BASE = '/ump-client-user-service';
+const API_BASE = '/api';
 
 interface LoginRequest {
   account: string;    // 账号或手机号
