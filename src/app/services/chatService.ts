@@ -3,9 +3,6 @@
 // AI 服务走 /ai 代理 → /ump-client-ai-service（微服务架构）
 const API_BASE = '/ai';
 
-// SSE 直连后端，完整路径包含服务前缀
-const SSE_BASE = 'http://xxx.ga-ga.xyz:19080/ump-client-ai-service';
-
 // ==================== 类型定义 ====================
 
 export interface ApiResponse<T> {
@@ -259,7 +256,7 @@ export const chatService = {
       closed = true;
     };
 
-    fetch(`${SSE_BASE}/client/ai/tasks/${taskId}/events?${params}`, {
+    fetch(`${API_BASE}/client/ai/tasks/${taskId}/events?${params}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
