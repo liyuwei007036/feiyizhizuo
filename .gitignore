@@ -39,3 +39,6 @@ coverage/
 # Temporary
 *.tmp
 *.temp
+
+.agents/
+skills-lock.json
