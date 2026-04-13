@@ -1,5 +1,5 @@
 import React from 'react';
-import { createMemoryRouter, Outlet, useRouteError } from 'react-router';
+import { createBrowserRouter, Outlet, useRouteError } from 'react-router';
 import { AppLayout } from './components/layout/AppLayout';
 import { ZhiHuiPage } from './pages/ZhiHuiPage';
 import { InspirationLibraryPage } from './pages/InspirationLibraryPage';
@@ -8,9 +8,17 @@ import { AdminPage } from './pages/AdminPage';
 import { PatternMarketPage } from './pages/PatternMarketPage';
 import { PermissionGuard } from './components/PermissionGuard';
 import { AppProvider } from './context/AppContext';
+import { AuthProvider } from './context/AuthContext';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import type { ModuleKey } from './context/AppContext';
 
-// ── Root layout ───────────────────────────────────────────────────────────────
+// ── 认证布局（无侧边栏）───────────────────────────────────────────────────────
+function AuthLayout() {
+  return <Outlet />;
+}
+
+// ── Root layout（AppLayout 包含侧边栏）──────────────────────────────────────
 function Root() {
   return (
     <AppProvider>
@@ -58,21 +66,36 @@ function Guard({ mod, Page }: { mod: ModuleKey; Page: React.ComponentType }) {
   );
 }
 
-export const router = createMemoryRouter(
+export const router = createBrowserRouter(
   [
+    // 认证路由（无侧边栏）
     {
       path: '/',
+      element: (
+        <AuthProvider>
+          <AuthLayout />
+        </AuthProvider>
+      ),
+      children: [
+        { index: true, element: <LoginPage /> },
+        { path: 'login', element: <LoginPage /> },
+        { path: 'register', element: <RegisterPage /> },
+      ],
+    },
+    // 应用路由（有侧边栏）
+    {
+      path: '/app',
       Component: Root,
       ErrorBoundary: RouteErrorBoundary,
       children: [
-        { index: true,        element: <Guard mod="zhihui"    Page={ZhiHuiPage} /> },
-        { path: 'zhihui',     element: <Guard mod="zhihui"    Page={ZhiHuiPage} /> },
-        { path: 'copilot',    element: <Guard mod="copilot"   Page={DesignCopilotPage} /> },
-        { path: 'materials',  element: <Guard mod="materials" Page={InspirationLibraryPage} /> },
-        { path: 'market',     element: <Guard mod="market"    Page={PatternMarketPage} /> },
-        { path: 'admin',      element: <Guard mod="admin"     Page={AdminPage} /> },
+        { index: true, element: <Guard mod="zhihui" Page={ZhiHuiPage} /> },
+        { path: 'zhihui', element: <Guard mod="zhihui" Page={ZhiHuiPage} /> },
+        { path: 'copilot', element: <Guard mod="copilot" Page={DesignCopilotPage} /> },
+        { path: 'materials', element: <Guard mod="materials" Page={InspirationLibraryPage} /> },
+        { path: 'market', element: <Guard mod="market" Page={PatternMarketPage} /> },
+        { path: 'admin', element: <Guard mod="admin" Page={AdminPage} /> },
       ],
     },
   ],
-  { initialEntries: ['/zhihui'], initialIndex: 0 }
+  { basename: '/' }
 );
