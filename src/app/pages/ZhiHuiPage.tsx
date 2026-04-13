@@ -276,7 +276,7 @@ export function ZhiHuiPage() {
   const subscribeToTask = (taskId: string, assistantMsgId: string) => {
     sseRef.current?.close();
 
-    setGenState('generating');
+    setGenState('matching');
 
     sseRef.current = chatService.subscribeEvents(
       taskId,
@@ -457,7 +457,6 @@ export function ZhiHuiPage() {
     }]);
 
     setIsStreaming(true);
-    setGenState('analyzing');
     setPatterns([]); // 清空之前的方案
 
     try {
