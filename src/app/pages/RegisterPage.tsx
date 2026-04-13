@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
-import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, ArrowLeft, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
@@ -10,33 +9,21 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
 
-interface RegisterForm {
-  phone: string;
-  code: string;
-  password: string;
-  confirmPassword: string;
-  agreeTerms: boolean;
-}
-
 export function RegisterPage() {
   const navigate = useNavigate();
-  const { register, sendCode } = useAuth();
+  const { register: doRegister, sendCode } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [codeCountdown, setCodeCountdown] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<RegisterForm>({
-    defaultValues: {
-      phone: '',
-      code: '',
-      password: '',
-      confirmPassword: '',
-      agreeTerms: false,
-    },
-  });
+  // 表单状态
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreeTerms, setAgreeTerms] = useState(false);
 
   const handleSendCode = async () => {
-    const phone = form.getValues('phone');
     if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
       toast.error('请输入正确的手机号');
       return;
@@ -45,8 +32,8 @@ export function RegisterPage() {
       const seconds = await sendCode(phone);
       setCodeCountdown(seconds);
       toast.success('验证码已发送');
-    } catch (e: any) {
-      toast.error(e.message || '发送失败');
+    } catch (err: any) {
+      toast.error(err.message || '发送失败');
     }
   };
 
@@ -58,27 +45,28 @@ export function RegisterPage() {
     }
   }, [codeCountdown]);
 
-  const handleSubmit = async (data: RegisterForm) => {
-    if (data.password !== data.confirmPassword) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
       toast.error('两次密码输入不一致');
       return;
     }
-    if (data.password.length < 6) {
+    if (password.length < 6) {
       toast.error('密码长度不能少于6位');
       return;
     }
-    if (!data.agreeTerms) {
+    if (!agreeTerms) {
       toast.error('请阅读并同意用户协议');
       return;
     }
 
     setIsLoading(true);
     try {
-      await register(data.phone, data.code, data.password);
+      await doRegister(phone, code, password);
       toast.success('注册成功');
       navigate('/app');
-    } catch (e: any) {
-      toast.error(e.message || '注册失败');
+    } catch (err: any) {
+      toast.error(err.message || '注册失败');
     } finally {
       setIsLoading(false);
     }
@@ -137,7 +125,7 @@ export function RegisterPage() {
             </p>
           </div>
 
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm mb-2" style={{ color: '#1A3D4A' }}>
                 手机号
@@ -146,7 +134,8 @@ export function RegisterPage() {
                 type="tel"
                 placeholder="请输入手机号"
                 maxLength={11}
-                {...form.register('phone')}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
                 className="h-12"
               />
             </div>
@@ -160,7 +149,8 @@ export function RegisterPage() {
                   type="text"
                   placeholder="请输入验证码"
                   maxLength={6}
-                  {...form.register('code')}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
                   className="h-12 flex-1"
                 />
                 <Button
@@ -184,7 +174,8 @@ export function RegisterPage() {
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="请设置登录密码（6-20位）"
-                  {...form.register('password')}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="h-12 pr-12"
                 />
                 <button
@@ -204,7 +195,8 @@ export function RegisterPage() {
               <Input
                 type="password"
                 placeholder="请再次输入密码"
-                {...form.register('confirmPassword')}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="h-12"
               />
             </div>
@@ -212,8 +204,8 @@ export function RegisterPage() {
             <div className="flex items-start gap-2 pt-2">
               <Checkbox
                 id="agreeTerms"
-                checked={form.watch('agreeTerms')}
-                onCheckedChange={(checked) => form.setValue('agreeTerms', !!checked)}
+                checked={agreeTerms}
+                onCheckedChange={(checked) => setAgreeTerms(!!checked)}
                 className="mt-0.5"
               />
               <label htmlFor="agreeTerms" className="text-sm leading-relaxed cursor-pointer" style={{ color: '#6B6558' }}>

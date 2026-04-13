@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
-import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, Smartphone, Lock, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
@@ -10,16 +9,6 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 
 type LoginMode = 'password' | 'code';
-
-interface LoginForm {
-  account: string;
-  password: string;
-}
-
-interface CodeForm {
-  phone: string;
-  code: string;
-}
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -29,11 +18,15 @@ export function LoginPage() {
   const [codeCountdown, setCodeCountdown] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  const passwordForm = useForm<LoginForm>({ defaultValues: { account: '', password: '' } });
-  const codeForm = useForm<CodeForm>({ defaultValues: { phone: '', code: '' } });
+  // 密码登录表单状态
+  const [account, setAccount] = useState('');
+  const [password, setPassword] = useState('');
+
+  // 验证码登录表单状态
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
 
   const handleSendCode = async () => {
-    const phone = codeForm.getValues('phone');
     if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
       toast.error('请输入正确的手机号');
       return;
@@ -55,35 +48,37 @@ export function LoginPage() {
     }
   }, [codeCountdown]);
 
-  const handlePasswordLogin = async (data: LoginForm) => {
-    if (!data.account || !data.password) {
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!account || !password) {
       toast.error('请填写账号和密码');
       return;
     }
     setIsLoading(true);
     try {
-      await login(data.account, data.password);
+      await login(account, password);
       toast.success('登录成功');
       navigate('/app');
-    } catch (e: any) {
-      toast.error(e.message || '登录失败');
+    } catch (err: any) {
+      toast.error(err.message || '登录失败');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCodeLogin = async (data: CodeForm) => {
-    if (!data.phone || !data.code) {
+  const handleCodeLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phone || !code) {
       toast.error('请填写手机号和验证码');
       return;
     }
     setIsLoading(true);
     try {
-      await loginByCode(data.phone, data.code);
+      await loginByCode(phone, code);
       toast.success('登录成功');
       navigate('/app');
-    } catch (e: any) {
-      toast.error(e.message || '登录失败');
+    } catch (err: any) {
+      toast.error(err.message || '登录失败');
     } finally {
       setIsLoading(false);
     }
@@ -161,14 +156,15 @@ export function LoginPage() {
 
           {/* 密码登录表单 */}
           {mode === 'password' && (
-            <form onSubmit={passwordForm.handleSubmit(handlePasswordLogin)} className="space-y-4">
+            <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div>
                 <label className="block text-sm mb-2" style={{ color: '#1A3D4A' }}>
                   账号 / 手机号
                 </label>
                 <Input
                   placeholder="请输入账号或手机号"
-                  {...passwordForm.register('account')}
+                  value={account}
+                  onChange={(e) => setAccount(e.target.value)}
                   className="h-12"
                 />
               </div>
@@ -181,7 +177,8 @@ export function LoginPage() {
                   <Input
                     type={showPassword ? 'text' : 'password'}
                     placeholder="请输入密码"
-                    {...passwordForm.register('password')}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="h-12 pr-12"
                   />
                   <button
@@ -214,7 +211,7 @@ export function LoginPage() {
 
           {/* 验证码登录表单 */}
           {mode === 'code' && (
-            <form onSubmit={codeForm.handleSubmit(handleCodeLogin)} className="space-y-4">
+            <form onSubmit={handleCodeLogin} className="space-y-4">
               <div>
                 <label className="block text-sm mb-2" style={{ color: '#1A3D4A' }}>
                   手机号
@@ -223,7 +220,8 @@ export function LoginPage() {
                   type="tel"
                   placeholder="请输入手机号"
                   maxLength={11}
-                  {...codeForm.register('phone')}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
                   className="h-12"
                 />
               </div>
@@ -237,7 +235,8 @@ export function LoginPage() {
                     type="text"
                     placeholder="请输入验证码"
                     maxLength={6}
-                    {...codeForm.register('code')}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
                     className="h-12 flex-1"
                   />
                   <Button
