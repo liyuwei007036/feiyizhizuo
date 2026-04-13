@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { NavLink, Outlet, useLocation } from 'react-router';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import type { ModuleKey } from '../../context/AppContext';
 import {
   Bell, ChevronLeft, ChevronRight, User, ChevronDown,
@@ -167,6 +168,8 @@ function Watermark({ text }: { text: string }) {
 
 function UserSettingsPanel({ onClose }: { onClose: () => void }) {
   const { userRole, setUserRole, t, watermarkText, userAvatar, setUserAvatar, userPhone, userName, setUserName } = useApp();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(userName);
   const [activeSection, setActiveSection] = useState<'profile' | 'prefs' | 'security'>('profile');
@@ -499,7 +502,16 @@ function UserSettingsPanel({ onClose }: { onClose: () => void }) {
         {/* Footer */}
         <div className="px-4 pb-4 pt-2" style={{ borderTop: '1px solid rgba(26,61,74,0.06)' }}>
           <button
-            onClick={() => { onClose(); toast.info('退出登录功能在实际部署中有效', { description: '原型演示环境不执行真实登出' }); }}
+            onClick={async () => {
+              onClose();
+              try {
+                await logout();
+                toast.success('已退出登录');
+              } catch (e) {
+                toast.error('退出失败');
+              }
+              navigate('/login');
+            }}
             className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all text-red-600 hover:bg-red-50"
             style={{ border: '1px solid rgba(239,68,68,0.18)' }}>
             <LogOut className="w-4 h-4" /> 退出登录
@@ -510,13 +522,15 @@ function UserSettingsPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function AppLayout() {
-  const { userRole, setUserRole, unreadCount, redDots, clearRedDot, t, sidebarCollapsed, toggleSidebar, watermarkText, canAccess, userAvatar, userPhone } = useApp();
+export function AppLayout({ children }: { children?: React.ReactNode }) {
+  const { userRole, setUserRole, unreadCount, redDots, clearRedDot, t, sidebarCollapsed, toggleSidebar, watermarkText, canAccess, userAvatar } = useApp();
   const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showUserSettings, setShowUserSettings] = useState(false);
-  const [searchFocused, setSearchFocused] = useState(false);
+
+  // Auth pages have no sidebar
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/';
 
   const roleInfo = ROLE_LABELS[userRole];
 
@@ -532,6 +546,16 @@ export function AppLayout() {
 
   const pathKey = Object.keys(PATH_TITLES).find(k => k !== '/' && location.pathname.startsWith(k)) || '/';
   const pageTitle = PATH_TITLES[pathKey];
+
+  // Auth pages: no sidebar layout
+  if (isAuthPage) {
+    return (
+      <div className="flex h-screen overflow-hidden relative" style={{ background: '#F5F0E8' }}>
+        <Watermark text={watermarkText} />
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden relative" style={{ background: '#F5F0E8' }}>
@@ -790,7 +814,7 @@ export function AppLayout() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto">
-          <Outlet />
+          {children}
         </main>
       </div>
 

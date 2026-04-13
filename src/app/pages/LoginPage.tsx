@@ -58,7 +58,7 @@ export function LoginPage() {
     try {
       await login(account, password);
       toast.success('登录成功');
-      navigate('/app');
+      navigate('/zhihui');
     } catch (err: any) {
       toast.error(err.message || '登录失败');
     } finally {
@@ -76,7 +76,7 @@ export function LoginPage() {
     try {
       await loginByCode(phone, code);
       toast.success('登录成功');
-      navigate('/app');
+      navigate('/zhihui');
     } catch (err: any) {
       toast.error(err.message || '登录失败');
     } finally {

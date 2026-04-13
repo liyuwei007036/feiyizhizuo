@@ -64,7 +64,7 @@ export function RegisterPage() {
     try {
       await doRegister(phone, code, password);
       toast.success('注册成功');
-      navigate('/app');
+      navigate('/zhihui');
     } catch (err: any) {
       toast.error(err.message || '注册失败');
     } finally {

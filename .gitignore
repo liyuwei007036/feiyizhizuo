@@ -42,3 +42,4 @@ coverage/
 
 .agents/
 skills-lock.json
+api/

@@ -1,0 +1,3227 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "UMP C端用户服务API",
+    "description": "UMP系统C端用户服务API文档，支持Web、小程序、H5、App等多端客户端",
+    "contact": {
+      "name": "UMP开发团队",
+      "email": "dev@ump.com"
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://172.24.0.2:8084",
+      "description": "Generated server url"
+    }
+  ],
+  "tags": [
+    {
+      "name": "文件管理",
+      "description": "客户端文件上传、读取和删除接口。"
+    },
+    {
+      "name": "百科管理",
+      "description": "云锦百科相关接口,包括精选纹样、分类等"
+    },
+    {
+      "name": "C端用户管理",
+      "description": "C端用户管理相关接口"
+    },
+    {
+      "name": "作品管理",
+      "description": "用户作品相关接口，包括生成结果查询、保存、发布和历史列表。"
+    },
+    {
+      "name": "C端认证管理",
+      "description": "客户端用户认证相关接口,支持Web、小程序、H5、App等多端"
+    },
+    {
+      "name": "登录日志管理",
+      "description": "C端用户登录日志相关接口"
+    }
+  ],
+  "paths": {
+    "/api/client/user-management/update": {
+      "put": {
+        "tags": [
+          "C端用户管理"
+        ],
+        "summary": "修改用户信息",
+        "description": "修改C端用户基本信息",
+        "operationId": "updateUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/user-management/update-status": {
+      "put": {
+        "tags": [
+          "C端用户管理"
+        ],
+        "summary": "修改用户状态",
+        "description": "修改C端用户状态(启用/禁用)",
+        "operationId": "updateUserStatus",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserStatusDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/user-management/reset-password": {
+      "put": {
+        "tags": [
+          "C端用户管理"
+        ],
+        "summary": "重置用户密码",
+        "description": "管理员重置C端用户密码",
+        "operationId": "resetPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/user-management/enable/{userId}": {
+      "put": {
+        "tags": [
+          "C端用户管理"
+        ],
+        "summary": "启用用户",
+        "description": "启用被禁用的C端用户",
+        "operationId": "enableUser",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/user-management/disable/{userId}": {
+      "put": {
+        "tags": [
+          "C端用户管理"
+        ],
+        "summary": "禁用用户",
+        "description": "禁用C端用户，禁用后用户无法登录",
+        "operationId": "disableUser",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/file/upload/file": {
+      "post": {
+        "tags": [
+          "文件管理"
+        ],
+        "summary": "上传文件",
+        "description": "上传通用客户端文件。",
+        "operationId": "uploadFile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultMapStringString"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/file/upload/chat-image": {
+      "post": {
+        "tags": [
+          "文件管理"
+        ],
+        "summary": "上传创作参考图",
+        "description": "上传图生图输入图片，并返回对应的 objectKey。",
+        "operationId": "uploadChatImage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultFileUploadVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/file/upload/avatar": {
+      "post": {
+        "tags": [
+          "文件管理"
+        ],
+        "summary": "上传头像",
+        "description": "上传用户头像图片。",
+        "operationId": "uploadAvatar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultMapStringString"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/auth/send-code": {
+      "post": {
+        "tags": [
+          "C端认证管理"
+        ],
+        "summary": "发送验证码",
+        "description": "发送短信验证码",
+        "operationId": "sendCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendCodeRequestDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultSendCodeResultVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/auth/register": {
+      "post": {
+        "tags": [
+          "C端认证管理"
+        ],
+        "summary": "用户注册",
+        "description": "手机号+验证码注册",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequestDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultTokenVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/auth/refresh-token": {
+      "post": {
+        "tags": [
+          "C端认证管理"
+        ],
+        "summary": "刷新令牌",
+        "description": "使用刷新令牌获取新的访问令牌",
+        "operationId": "refreshToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequestDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultTokenVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/auth/logout": {
+      "post": {
+        "tags": [
+          "C端认证管理"
+        ],
+        "summary": "用户登出",
+        "description": "清除访问令牌,实现真正的注销",
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/auth/login": {
+      "post": {
+        "tags": [
+          "C端认证管理"
+        ],
+        "summary": "用户登录",
+        "description": "账号/手机号+密码登录",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequestDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultTokenVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/artwork/{artworkId}/unpublish": {
+      "post": {
+        "tags": [
+          "作品管理"
+        ],
+        "summary": "取消发布作品",
+        "description": "将已发布作品恢复为未发布状态。",
+        "operationId": "unpublishArtwork",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultArtworkDetailVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/artwork/{artworkId}/publish": {
+      "post": {
+        "tags": [
+          "作品管理"
+        ],
+        "summary": "发布作品",
+        "description": "将已保存的草稿作品发布。",
+        "operationId": "publishArtwork",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultArtworkDetailVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/artwork/generated/save": {
+      "post": {
+        "tags": [
+          "作品管理"
+        ],
+        "summary": "保存生成作品",
+        "description": "将 AI 生成结果保存为草稿作品。",
+        "operationId": "saveGeneratedArtwork",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveGeneratedArtworkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultGeneratedArtworkDetailVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/artwork/generated/publish": {
+      "post": {
+        "tags": [
+          "作品管理"
+        ],
+        "summary": "发布生成作品",
+        "description": "将 AI 生成结果直接发布为正式作品。",
+        "operationId": "publishGeneratedArtwork",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveGeneratedArtworkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultGeneratedArtworkDetailVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/artwork/generated/detail": {
+      "post": {
+        "tags": [
+          "作品管理"
+        ],
+        "summary": "获取生成作品详情",
+        "description": "根据会话ID、请求ID和 objectKey 获取本次 AI 生成结果。",
+        "operationId": "getGeneratedArtworkDetail",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedArtworkQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultGeneratedArtworkDetailVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/user-management/page": {
+      "post": {
+        "tags": [
+          "C端用户管理"
+        ],
+        "summary": "分页查询用户列表",
+        "description": "管理员分页查询C端用户列表",
+        "operationId": "pageUsers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserQueryDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageClientUserVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/login-log/page": {
+      "post": {
+        "tags": [
+          "登录日志管理"
+        ],
+        "summary": "分页查询登录日志",
+        "description": "管理员查询所有用户的登录日志",
+        "operationId": "pageLoginLogs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginLogQueryDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageLoginLogVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/login-log/my-logs": {
+      "post": {
+        "tags": [
+          "登录日志管理"
+        ],
+        "summary": "查看我的登录日志",
+        "description": "用户查看自己的登录记录",
+        "operationId": "getMyLoginLogs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginLogQueryDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageLoginLogVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/wiki/home": {
+      "get": {
+        "tags": [
+          "百科管理"
+        ],
+        "summary": "获取百科首页数据",
+        "description": "获取百科首页的精选纹样和分类列表",
+        "operationId": "getWikiHome",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultWikiHomeVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/file/object-image": {
+      "get": {
+        "tags": [
+          "文件管理"
+        ],
+        "summary": "读取对象图片",
+        "description": "校验权限后，根据 objectKey 流式返回图片内容。",
+        "operationId": "getObjectImage",
+        "parameters": [
+          {
+            "name": "objectKey",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/auth/current-user": {
+      "get": {
+        "tags": [
+          "C端认证管理"
+        ],
+        "summary": "获取当前用户信息",
+        "description": "获取当前登录用户的详细信息",
+        "operationId": "getCurrentUserInfo",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultUserProfileVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/artwork/{artworkId}": {
+      "get": {
+        "tags": [
+          "作品管理"
+        ],
+        "summary": "获取作品详情",
+        "description": "根据作品ID获取作品详情。",
+        "operationId": "getArtworkDetail",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultArtworkDetailVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/artwork/history": {
+      "get": {
+        "tags": [
+          "作品管理"
+        ],
+        "summary": "获取创作历史",
+        "description": "获取当前用户的创作历史列表，可按关键词搜索。",
+        "operationId": "getCreationHistory",
+        "parameters": [
+          {
+            "name": "arg0",
+            "in": "query",
+            "description": "搜索关键词",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultCreationHistoryVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/user-management/{userId}": {
+      "get": {
+        "tags": [
+          "C端用户管理"
+        ],
+        "summary": "获取用户详情",
+        "description": "根据用户ID获取用户详细信息",
+        "operationId": "getUserById",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultClientUserVO"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "C端用户管理"
+        ],
+        "summary": "删除用户",
+        "description": "删除C端用户(软删除)",
+        "operationId": "deleteUser",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/client/file/delete": {
+      "delete": {
+        "tags": [
+          "文件管理"
+        ],
+        "summary": "删除文件",
+        "description": "根据文件URL删除已上传文件。",
+        "operationId": "deleteFile",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method Not Allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ResultVoid": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateUserDTO": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "用户ID",
+            "format": "int64"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "显示名称"
+          },
+          "gender": {
+            "type": "integer",
+            "description": "性别(0:未知, 1:男, 2:女)",
+            "format": "int32"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "头像URL"
+          }
+        },
+        "description": "修改用户信息"
+      },
+      "UpdateUserStatusDTO": {
+        "required": [
+          "status",
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "integer",
+            "description": "用户ID",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string",
+            "description": "状态(ENABLED:启用, DISABLED:禁用)"
+          }
+        },
+        "description": "修改用户状态"
+      },
+      "ResetPasswordDTO": {
+        "required": [
+          "newPassword",
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "integer",
+            "description": "用户ID",
+            "format": "int64"
+          },
+          "newPassword": {
+            "maxLength": 20,
+            "minLength": 6,
+            "type": "string",
+            "description": "新密码"
+          }
+        },
+        "description": "重置密码"
+      },
+      "ResultMapStringString": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "FileUploadVO": {
+        "type": "object",
+        "properties": {
+          "objectKey": {
+            "type": "string",
+            "description": "对象键"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "MIME 类型"
+          },
+          "size": {
+            "type": "integer",
+            "description": "文件大小（字节）",
+            "format": "int64"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "原始文件名"
+          }
+        },
+        "description": "文件上传响应"
+      },
+      "ResultFileUploadVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/FileUploadVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "SendCodeRequestDTO": {
+        "required": [
+          "phone"
+        ],
+        "type": "object",
+        "properties": {
+          "phone": {
+            "pattern": "^1[3-9]\\d{9}$",
+            "type": "string",
+            "description": "手机号",
+            "example": "13800138000"
+          }
+        },
+        "description": "发送验证码请求"
+      },
+      "ResultSendCodeResultVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SendCodeResultVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "SendCodeResultVO": {
+        "type": "object",
+        "properties": {
+          "cooldownSeconds": {
+            "type": "integer",
+            "description": "冷却时间(秒)",
+            "format": "int32",
+            "example": 60
+          }
+        },
+        "description": "发送验证码结果"
+      },
+      "RegisterRequestDTO": {
+        "required": [
+          "code",
+          "password",
+          "phone"
+        ],
+        "type": "object",
+        "properties": {
+          "phone": {
+            "pattern": "^1[3-9]\\d{9}$",
+            "type": "string",
+            "description": "手机号",
+            "example": "13800138000"
+          },
+          "code": {
+            "maxLength": 6,
+            "minLength": 6,
+            "type": "string",
+            "description": "短信验证码",
+            "example": "123456"
+          },
+          "password": {
+            "maxLength": 20,
+            "minLength": 6,
+            "type": "string",
+            "description": "密码",
+            "example": "password123"
+          }
+        },
+        "description": "注册请求"
+      },
+      "ClientUserVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "用户ID",
+            "example": "1234567890",
+            "refType": null
+          },
+          "account": {
+            "type": "string",
+            "description": "账号",
+            "example": "YJ1710753600000",
+            "refType": null
+          },
+          "displayName": {
+            "type": "string",
+            "description": "显示名称",
+            "example": "用户8000",
+            "refType": null
+          },
+          "avatarUrl": {
+            "type": "string",
+            "description": "头像URL",
+            "example": "https://example.com/avatar.png",
+            "refType": null
+          },
+          "badge": {
+            "type": "string",
+            "description": "徽章标识",
+            "example": "VIP",
+            "refType": null
+          }
+        },
+        "description": "C端用户信息"
+      },
+      "ResultTokenVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TokenVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "TokenVO": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "访问令牌",
+            "example": "xxx-xxx-xxx",
+            "refType": null
+          },
+          "refreshToken": {
+            "type": "string",
+            "description": "刷新令牌",
+            "example": "xxx-xxx-xxx",
+            "refType": null
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "访问令牌过期时间(秒)",
+            "format": "int64",
+            "example": 7200,
+            "refType": null
+          },
+          "user": {
+            "$ref": "#/components/schemas/ClientUserVO",
+            "refType": "ClientUserVO"
+          }
+        },
+        "description": "令牌响应"
+      },
+      "RefreshTokenRequestDTO": {
+        "required": [
+          "accessToken",
+          "refreshToken"
+        ],
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "访问令牌",
+            "example": "xxx-xxx-xxx"
+          },
+          "refreshToken": {
+            "type": "string",
+            "description": "刷新令牌",
+            "example": "xxx-xxx-xxx"
+          }
+        },
+        "description": "刷新令牌请求"
+      },
+      "LoginRequestDTO": {
+        "required": [
+          "account",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "账号(支持账号或手机号)",
+            "example": "13800138000",
+            "refType": null
+          },
+          "password": {
+            "type": "string",
+            "description": "密码",
+            "example": "password123",
+            "refType": null
+          }
+        },
+        "description": "登录请求"
+      },
+      "ArtworkDetailVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "作品ID"
+          },
+          "code": {
+            "type": "string",
+            "description": "作品编码"
+          },
+          "title": {
+            "type": "string",
+            "description": "作品标题"
+          },
+          "description": {
+            "type": "string",
+            "description": "作品描述"
+          },
+          "longDescription": {
+            "type": "string",
+            "description": "详细描述"
+          },
+          "objectKey": {
+            "type": "string",
+            "description": "图片对象键"
+          },
+          "isPublished": {
+            "type": "boolean",
+            "description": "是否已发布"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时间",
+            "format": "date-time"
+          }
+        },
+        "description": "作品详情"
+      },
+      "ResultArtworkDetailVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ArtworkDetailVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "SaveGeneratedArtworkRequest": {
+        "required": [
+          "description",
+          "objectKey",
+          "requestId",
+          "sessionId",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "会话ID"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "请求ID"
+          },
+          "objectKey": {
+            "type": "string",
+            "description": "图片对象键"
+          },
+          "title": {
+            "type": "string",
+            "description": "作品标题"
+          },
+          "description": {
+            "type": "string",
+            "description": "作品描述"
+          }
+        },
+        "description": "保存生成作品请求"
+      },
+      "GeneratedArtworkDetailVO": {
+        "type": "object",
+        "properties": {
+          "artworkId": {
+            "type": "string",
+            "description": "作品ID，保存后才会返回"
+          },
+          "code": {
+            "type": "string",
+            "description": "作品编码"
+          },
+          "title": {
+            "type": "string",
+            "description": "作品标题"
+          },
+          "description": {
+            "type": "string",
+            "description": "作品描述"
+          },
+          "objectKey": {
+            "type": "string",
+            "description": "图片对象键"
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "会话ID"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "请求ID"
+          },
+          "isPublished": {
+            "type": "boolean",
+            "description": "是否已发布"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时间",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "更新时间",
+            "format": "date-time"
+          }
+        },
+        "description": "生成作品详情"
+      },
+      "ResultGeneratedArtworkDetailVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/GeneratedArtworkDetailVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "GeneratedArtworkQueryRequest": {
+        "required": [
+          "objectKey",
+          "requestId",
+          "sessionId"
+        ],
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "会话ID"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "请求ID"
+          },
+          "objectKey": {
+            "type": "string",
+            "description": "图片对象键"
+          }
+        },
+        "description": "查询生成作品详情请求"
+      },
+      "UserQueryDTO": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "账号"
+          },
+          "phone": {
+            "type": "string",
+            "description": "手机号"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "显示名称"
+          },
+          "status": {
+            "type": "string",
+            "description": "状态(ENABLED:启用, DISABLED:禁用, LOCKED:锁定)"
+          },
+          "gender": {
+            "type": "integer",
+            "description": "性别(0:未知, 1:男, 2:女)",
+            "format": "int32"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "注册开始时间",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "注册结束时间",
+            "format": "date-time"
+          },
+          "pageNum": {
+            "type": "integer",
+            "description": "页码",
+            "format": "int32",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页数量",
+            "format": "int32",
+            "example": 10
+          }
+        },
+        "description": "用户查询条件"
+      },
+      "OrderItem": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "asc": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PageClientUserVO": {
+        "type": "object",
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientUserVO"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "current": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "orders": {
+            "type": "array",
+            "writeOnly": true,
+            "items": {
+              "$ref": "#/components/schemas/OrderItem"
+            }
+          },
+          "optimizeCountSql": {
+            "$ref": "#/components/schemas/PageClientUserVO"
+          },
+          "searchCount": {
+            "$ref": "#/components/schemas/PageClientUserVO"
+          },
+          "optimizeJoinOfCountSql": {
+            "type": "boolean",
+            "writeOnly": true
+          },
+          "maxLimit": {
+            "type": "integer",
+            "format": "int64",
+            "writeOnly": true
+          },
+          "countId": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int64",
+            "deprecated": true
+          }
+        }
+      },
+      "ResultPageClientUserVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageClientUserVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginLogQueryDTO": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "用户账号"
+          },
+          "loginType": {
+            "type": "string",
+            "description": "登录方式"
+          },
+          "loginIp": {
+            "type": "string",
+            "description": "登录IP"
+          },
+          "status": {
+            "type": "string",
+            "description": "登录状态"
+          },
+          "startTime": {
+            "type": "string",
+            "description": "开始时间",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "结束时间",
+            "format": "date-time"
+          },
+          "pageNum": {
+            "type": "integer",
+            "description": "页码",
+            "format": "int32",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "每页数量",
+            "format": "int32",
+            "example": 10
+          }
+        },
+        "description": "登录日志查询条件"
+      },
+      "LoginLogVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "日志ID",
+            "format": "int64"
+          },
+          "userId": {
+            "type": "integer",
+            "description": "用户ID",
+            "format": "int64"
+          },
+          "account": {
+            "type": "string",
+            "description": "用户账号"
+          },
+          "loginType": {
+            "type": "string",
+            "description": "登录方式"
+          },
+          "loginIp": {
+            "type": "string",
+            "description": "登录IP"
+          },
+          "loginAddress": {
+            "type": "string",
+            "description": "登录地址"
+          },
+          "browser": {
+            "type": "string",
+            "description": "浏览器"
+          },
+          "os": {
+            "type": "string",
+            "description": "操作系统"
+          },
+          "deviceType": {
+            "type": "string",
+            "description": "设备类型"
+          },
+          "status": {
+            "type": "string",
+            "description": "登录状态"
+          },
+          "failureReason": {
+            "type": "string",
+            "description": "失败原因"
+          },
+          "loginTime": {
+            "type": "string",
+            "description": "登录时间",
+            "format": "date-time"
+          }
+        },
+        "description": "登录日志信息"
+      },
+      "PageLoginLogVO": {
+        "type": "object",
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoginLogVO"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "current": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "orders": {
+            "type": "array",
+            "writeOnly": true,
+            "items": {
+              "$ref": "#/components/schemas/OrderItem"
+            }
+          },
+          "optimizeCountSql": {
+            "$ref": "#/components/schemas/PageLoginLogVO"
+          },
+          "searchCount": {
+            "$ref": "#/components/schemas/PageLoginLogVO"
+          },
+          "optimizeJoinOfCountSql": {
+            "type": "boolean",
+            "writeOnly": true
+          },
+          "maxLimit": {
+            "type": "integer",
+            "format": "int64",
+            "writeOnly": true
+          },
+          "countId": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int64",
+            "deprecated": true
+          }
+        }
+      },
+      "ResultPageLoginLogVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageLoginLogVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "ResultWikiHomeVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WikiHomeVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "WikiCategoryVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "分类ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "分类标题"
+          },
+          "iconUrl": {
+            "type": "string",
+            "description": "分类图标URL"
+          }
+        },
+        "description": "百科分类"
+      },
+      "WikiFeaturedItemVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "纹样ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "纹样标题"
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "纹样图片URL"
+          }
+        },
+        "description": "百科精选纹样"
+      },
+      "WikiHomeVO": {
+        "type": "object",
+        "properties": {
+          "featured": {
+            "type": "array",
+            "description": "精选纹样列表",
+            "items": {
+              "$ref": "#/components/schemas/WikiFeaturedItemVO"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "description": "分类列表",
+            "items": {
+              "$ref": "#/components/schemas/WikiCategoryVO"
+            }
+          },
+          "footerText": {
+            "type": "string",
+            "description": "底部文字"
+          }
+        },
+        "description": "百科首页数据"
+      },
+      "ProfileMetric": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "标签",
+            "example": "创作数"
+          },
+          "value": {
+            "type": "string",
+            "description": "值",
+            "example": "0"
+          }
+        },
+        "description": "用户指标"
+      },
+      "ProfileService": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "服务ID",
+            "example": "creation-history"
+          },
+          "label": {
+            "type": "string",
+            "description": "标签",
+            "example": "创作历史"
+          },
+          "iconUrl": {
+            "type": "string",
+            "description": "图标URL",
+            "example": "https://example.com/icons/creation.png"
+          },
+          "route": {
+            "type": "string",
+            "description": "路由",
+            "example": "CreationHistory"
+          }
+        },
+        "description": "用户服务"
+      },
+      "ResultUserProfileVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/UserProfileVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "UserProfileVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "用户ID",
+            "example": "1234567890"
+          },
+          "account": {
+            "type": "string",
+            "description": "账号",
+            "example": "YJ1710753600000"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "显示名称",
+            "example": "用户8000"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "description": "头像URL",
+            "example": "https://example.com/avatar.png"
+          },
+          "badge": {
+            "type": "string",
+            "description": "徽章标识",
+            "example": "VIP"
+          },
+          "metrics": {
+            "type": "array",
+            "description": "指标列表",
+            "items": {
+              "$ref": "#/components/schemas/ProfileMetric"
+            }
+          },
+          "services": {
+            "type": "array",
+            "description": "服务列表",
+            "items": {
+              "$ref": "#/components/schemas/ProfileService"
+            }
+          }
+        },
+        "description": "用户详细信息"
+      },
+      "CreationHistoryVO": {
+        "type": "object",
+        "properties": {
+          "recent": {
+            "type": "array",
+            "description": "最近作品列表",
+            "items": {
+              "$ref": "#/components/schemas/CreationSummaryVO"
+            }
+          },
+          "archived": {
+            "type": "array",
+            "description": "归档作品列表",
+            "items": {
+              "$ref": "#/components/schemas/CreationSummaryVO"
+            }
+          }
+        },
+        "description": "创作历史"
+      },
+      "CreationSummaryVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "作品ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "作品标题"
+          },
+          "description": {
+            "type": "string",
+            "description": "作品描述"
+          },
+          "objectKey": {
+            "type": "string",
+            "description": "图片对象键"
+          },
+          "isPublished": {
+            "type": "boolean",
+            "description": "是否已发布"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时间",
+            "format": "date-time"
+          }
+        },
+        "description": "作品摘要"
+      },
+      "ResultCreationHistoryVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CreationHistoryVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "ResultClientUserVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ClientUserVO"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "x-openapi": {
+    "x-setting": null,
+    "x-markdownFiles": []
+  }
+}
