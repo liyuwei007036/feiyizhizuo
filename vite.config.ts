@@ -33,4 +33,14 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  // API 代理配置
+  server: {
+    proxy: {
+      '/ump-client-user-service': {
+        target: 'http://xxx.ga-ga.xyz:19080',
+        changeOrigin: true,
+      },
+    },
+  },
 })

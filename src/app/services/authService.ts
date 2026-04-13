@@ -1,6 +1,6 @@
 // src/app/services/authService.ts
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE = '/ump-client-user-service';
 
 interface LoginRequest {
   account: string;    // 账号或手机号
