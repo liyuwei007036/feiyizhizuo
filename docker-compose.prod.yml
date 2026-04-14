@@ -1,0 +1,10 @@
+services:
+  feiyizhizuo-web:
+    container_name: feiyizhizuo-web
+    image: feiyizhizuo-web:prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "19081:80"

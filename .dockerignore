@@ -1,0 +1,13 @@
+node_modules
+dist-ssr
+.git
+.agents
+.worktrees
+.idea
+.vscode
+coverage
+*.log
+npm-debug.log*
+pnpm-debug.log*
+Thumbs.db
+.DS_Store
