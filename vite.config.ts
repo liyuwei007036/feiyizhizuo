@@ -38,12 +38,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://xxx.ga-ga.xyz:19080',
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/ump-client-user-service'),
       },
       '/ai': {
-        target: 'http://xxx.ga-ga.xyz:19080',
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ai/, '/ump-client-ai-service'),
       },
