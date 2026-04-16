@@ -1,38 +1,34 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router';
 import { useApp } from '../context/AppContext';
 import type { MyPattern } from '../context/AppContext';
 import { toast } from 'sonner';
 import {
-  Plus, Send, Sparkles, ChevronDown, ImagePlus, FileText, Paperclip,
-  X, RotateCcw, Loader2, Clock,
-  Archive, ZoomIn, Bookmark, BookmarkCheck,
+  Plus, Send, Sparkles, X, RotateCcw, Loader2, Clock,
+  ZoomIn, Bookmark, BookmarkCheck,
 } from 'lucide-react';
-import { chatService } from '../services/chatService';
-
-// ── Mock Data ─────────────────────────────────────────────────────────────────
+import {
+  chatService,
+  type SSEConnectionState,
+  type SSEImageInfo,
+  type SSEMessage,
+} from '../services/chatService';
 
 const CATEGORIES = [
-  { id: 'yunjin',  name: '云锦', nameEn: 'Yunjin',      enabled: true  },
-  { id: 'songjin', name: '宋锦', nameEn: 'Songjin',     enabled: false },
-  { id: 'shujin',  name: '蜀锦', nameEn: 'Shujin',      enabled: false },
-  { id: 'kesi',    name: '缂丝', nameEn: 'Kesi',        enabled: false },
-  { id: 'cixiu',   name: '刺绣', nameEn: 'Embroidery',  enabled: false },
-  { id: 'mudiao',  name: '木雕', nameEn: 'Woodcraft',   enabled: false },
-  { id: 'taoci',   name: '陶瓷', nameEn: 'Ceramics',    enabled: false },
-  { id: 'qiqi',    name: '漆器', nameEn: 'Lacquerware', enabled: false },
-  { id: 'jianzhi', name: '剪纸', nameEn: 'Papercutting',enabled: false },
-  { id: 'kehui',   name: '刻绘', nameEn: 'Carving',     enabled: false },
-];
+  { id: 'yunjin', name: '云锦', nameEn: 'Yunjin', enabled: true },
+  { id: 'songjin', name: '宋锦', nameEn: 'Songjin', enabled: false },
+  { id: 'shujin', name: '蜀锦', nameEn: 'Shujin', enabled: false },
+  { id: 'kesi', name: '缂丝', nameEn: 'Kesi', enabled: false },
+  { id: 'cixiu', name: '刺绣', nameEn: 'Embroidery', enabled: false },
+  { id: 'mudiao', name: '木雕', nameEn: 'Woodcraft', enabled: false },
+  { id: 'taoci', name: '陶瓷', nameEn: 'Ceramics', enabled: false },
+  { id: 'qiqi', name: '漆器', nameEn: 'Lacquerware', enabled: false },
+  { id: 'jianzhi', name: '剪纸', nameEn: 'Papercutting', enabled: false },
+  { id: 'kehui', name: '刻绘', nameEn: 'Carving', enabled: false },
+] as const;
 
-const UPLOAD_OPTIONS = [
-  { icon: <ImagePlus className="w-4 h-4" />, label: '上传图片',       labelEn: 'Upload Image'    },
-  { icon: <FileText  className="w-4 h-4" />, label: '上传草图',       labelEn: 'Upload Sketch'   },
-  { icon: <Paperclip className="w-4 h-4" />, label: '上传文档',       labelEn: 'Upload Document' },
-  { icon: <FileText  className="w-4 h-4" />, label: '上传客户 Brief', labelEn: 'Upload Brief'    },
-  { icon: <Archive   className="w-4 h-4" />, label: '导入已有纹样',   labelEn: 'Import Pattern'  },
-];
+const DEFAULT_CATEGORY = CATEGORIES.find(category => category.enabled) ?? CATEGORIES[0];
 
 const SAMPLE_PROMPTS = [
   '生成一组适合南京城市礼赠场景的云锦纹样，整体偏典雅、祥瑞、稳重，适合高端礼盒包装',
@@ -42,16 +38,16 @@ const SAMPLE_PROMPTS = [
 
 // Category color map for session list badges
 const CAT_COLORS: Record<string, { bg: string; text: string }> = {
-  '云锦': { bg: 'rgba(196,145,42,0.1)',  text: '#C4912A' },
-  '宋锦': { bg: 'rgba(26,61,74,0.08)',   text: '#1A3D4A' },
-  '蜀锦': { bg: 'rgba(255,105,180,0.1)', text: '#FF69B4' },
-  '缂丝': { bg: 'rgba(107,79,138,0.1)', text: '#6B4F8A' },
-  '刺绣': { bg: 'rgba(255,165,0,0.1)',  text: '#FFA500' },
-  '木雕': { bg: 'rgba(26,61,74,0.06)',   text: '#6B6558' },
-  '陶瓷': { bg: 'rgba(26,61,74,0.06)',   text: '#6B6558' },
-  '漆器': { bg: 'rgba(255,215,0,0.1)',  text: '#FFD700' },
-  '剪纸': { bg: 'rgba(255,140,0,0.1)',  text: '#FF8C00' },
-  '刻绘': { bg: 'rgba(139,0,0,0.1)',    text: '#8B0000' },
+  云锦: { bg: 'rgba(196,145,42,0.1)', text: '#C4912A' },
+  宋锦: { bg: 'rgba(26,61,74,0.08)', text: '#1A3D4A' },
+  蜀锦: { bg: 'rgba(255,105,180,0.1)', text: '#FF69B4' },
+  缂丝: { bg: 'rgba(107,79,138,0.1)', text: '#6B4F8A' },
+  刺绣: { bg: 'rgba(255,165,0,0.1)', text: '#FFA500' },
+  木雕: { bg: 'rgba(26,61,74,0.06)', text: '#6B6558' },
+  陶瓷: { bg: 'rgba(26,61,74,0.06)', text: '#6B6558' },
+  漆器: { bg: 'rgba(255,215,0,0.1)', text: '#FFD700' },
+  剪纸: { bg: 'rgba(255,140,0,0.1)', text: '#FF8C00' },
+  刻绘: { bg: 'rgba(139,0,0,0.1)', text: '#8B0000' },
 };
 
 interface Session {
@@ -62,50 +58,36 @@ interface Session {
   group: 'today' | 'week' | 'month';
 }
 
-const MOCK_SESSIONS: Session[] = [
-  { id: 's1', title: '南京城市礼赠云锦纹样', category: '云锦', time: '2026-04-07 09:24', group: 'today' },
-  { id: 's2', title: '故宫文创丝巾方向探索', category: '云锦', time: '2026-04-07 11:05', group: 'today' },
-  { id: 's3', title: '现代宋锦包装纹样设计', category: '宋锦', time: '2026-04-06 14:30', group: 'week'  },
-  { id: 's4', title: '苏绣礼品系列开发探索', category: '苏绣', time: '2026-04-05 16:00', group: 'week'  },
-  { id: 's5', title: '博物馆文创系列纹样',   category: '云锦', time: '2026-04-01 10:15', group: 'month' },
-];
-
 interface GeneratedPattern {
   id: string;
+  status: 'pending' | 'ready' | 'failed';
+  requestId?: string;
+  recordId?: string;
   title: string;
   desc: string;
   tags: string[];
   style: string;
   scene: string;
   imageUrl: string;
+  objectKey?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  retriable?: boolean;
 }
 
-const MOCK_PATTERNS: GeneratedPattern[] = [
-  {
-    id: 'p1', title: '祥云·典雅版',
-    desc: '以四合如意云纹为骨架，加入金线勾勒，整体呈祥瑞典雅气质',
-    tags: ['吉祥', '传统', '礼品感'], style: '古典工笔', scene: '高端礼赠',
-    imageUrl: 'https://images.unsplash.com/photo-1773394175834-2c407177ddcf?w=800',
-  },
-  {
-    id: 'p2', title: '流云·现代感',
-    desc: '以写意水墨手法重构云纹结构，墨色与金色交融，传统与现代共存',
-    tags: ['现代', '联名', '时尚感'], style: '水墨写意', scene: '品牌联名',
-    imageUrl: 'https://images.unsplash.com/photo-1649300726285-19ac2b1c3654?w=800',
-  },
-  {
-    id: 'p3', title: '华彩·富贵锦',
-    desc: '多彩云锦工艺，牡丹与如意纹组合，色彩饱满，高端礼赠首选',
-    tags: ['富贵', '礼赠', '高端'], style: '重彩华丽', scene: '节庆礼盒',
-    imageUrl: 'https://images.unsplash.com/photo-1761724794734-4ee4148a621b?w=800',
-  },
-  {
-    id: 'p4', title: '印记·城市章',
-    desc: '融合南京地域文化符号，印章感构图，兼顾文化辨识与现代极简',
-    tags: ['城市', '地域', '印章'], style: '现代极简', scene: '文创周边',
-    imageUrl: 'https://images.unsplash.com/photo-1609817482305-222c7d90ab06?w=800',
-  },
-];
+type PersistedTaskRecord = {
+  sessionId: string;
+  taskId: string;
+  assistantMessageId: string | null;
+  lastEventId: string | null;
+  status: string | null;
+  phase: string | null;
+  queuePosition: number | null;
+  estimatedWaitMs: number | null;
+  requestId: string | null;
+  patterns: GeneratedPattern[];
+  updatedAt: number;
+};
 
 type ConvMessage = {
   id: string;
@@ -113,44 +95,77 @@ type ConvMessage = {
   content: string;
   category?: string;
   timestamp: string;
+  taskId?: string;
+  assistantMessageId?: string;
+  lastEventId?: string;
+  lastEventSeq?: number;
+  status?: string;
+  phase?: string;
+  queuePosition?: number | null;
+  estimatedWaitMs?: number | null;
+  requestId?: string;
+  recordId?: string;
+  recordIds?: string[];
+  artifactStatus?: string;
+  artifact?: {
+    status?: string;
+    requestId?: string;
+    recordId?: string;
+    recordIds?: string[];
+    objectKey?: string;
+    objectKeys?: string[];
+    promptSummary?: string;
+    remoteStatus?: string;
+    width?: number;
+    height?: number;
+    nsfwDetected?: boolean;
+  };
+  images?: ConversationImage[];
 };
 
-const SESSION_CONVERSATIONS: Record<string, { messages: ConvMessage[]; patterns: GeneratedPattern[]; savedIds: string[] }> = {
-  s1: {
-    messages: [
-      { id: 'm1', role: 'user',   content: '生成一组适合南京城市礼赠场景的云锦纹样，整体偏典雅、祥瑞、稳重，适合高端礼盒包装', category: '云锦', timestamp: '09:24' },
-      { id: 'm2', role: 'system', content: '已基于您的创作方向，结合「云锦」品类工艺规则与可用授权纹样，生成以下 4 个方向。', timestamp: '09:26' },
-    ],
-    patterns: MOCK_PATTERNS, savedIds: ['p1'],
-  },
-  s2: {
-    messages: [
-      { id: 'm1', role: 'user',   content: '参考凤凰纹样草图，转化为更现代的云锦风格图案，保留传统骨架，降低复杂度，用于故宫文创丝巾产品', category: '云锦', timestamp: '11:05' },
-      { id: 'm2', role: 'system', content: '已基于「凤凰纹样草图」与「故宫文创丝巾」场景需求，结合云锦工艺参数生成 4 个创作方向。', timestamp: '11:07' },
-    ],
-    patterns: MOCK_PATTERNS, savedIds: [],
-  },
-  s3: {
-    messages: [
-      { id: 'm1', role: 'user',   content: '需要一套现代宋锦纹样用于高端包装设计，客户是某知名白酒品牌，希望兼顾文化气质和现代感', category: '宋锦', timestamp: '14:30' },
-      { id: 'm2', role: 'system', content: '已结合「宋锦」工艺特性与白酒品牌的场景需求，生成 4 个设计方向。', timestamp: '14:32' },
-    ],
-    patterns: MOCK_PATTERNS, savedIds: ['p2'],
-  },
-  s4: {
-    messages: [
-      { id: 'm1', role: 'user',   content: '探索一套苏绣礼品系列，面向高端礼赠市场，需要 3-4 个产品形态', category: '苏绣', timestamp: '16:00' },
-      { id: 'm2', role: 'system', content: '已基于「苏绣」工艺特性与高端礼赠场景，生成 4 个方向。', timestamp: '16:02' },
-    ],
-    patterns: MOCK_PATTERNS, savedIds: [],
-  },
-  s5: {
-    messages: [
-      { id: 'm1', role: 'user',   content: '博物馆文创系列纹样开发，需要覆盖云锦、宋锦、苏绣三种工艺，形成统一设计语言', category: '云锦', timestamp: '10:15' },
-      { id: 'm2', role: 'system', content: '已为「博物馆文创系列」生成跨工艺统一设计方向。系列已保存至灵感纹库。', timestamp: '10:18' },
-    ],
-    patterns: MOCK_PATTERNS, savedIds: ['p1', 'p3'],
-  },
+type ConversationImage = {
+  recordId?: string;
+  objectKey: string;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  width?: number;
+  height?: number;
+};
+
+type PatternStatus = GeneratedPattern['status'];
+
+const PATTERN_STATUS_LABELS: Record<PatternStatus, string> = {
+  pending: '生成中',
+  ready: '已完成',
+  failed: '生成失败',
+};
+
+const ACTIVE_TASK_STORAGE_KEY = 'zhihui:active-task-map:v1';
+const RECOVERABLE_TASK_STATUSES = new Set(['PENDING', 'RUNNING', 'CANCEL_REQUESTED']);
+
+const readPersistedTaskMap = (): Record<string, PersistedTaskRecord> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_TASK_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed as Record<string, PersistedTaskRecord>;
+  } catch {
+    return {};
+  }
+};
+
+const writePersistedTaskMap = (taskMap: Record<string, PersistedTaskRecord>) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(ACTIVE_TASK_STORAGE_KEY, JSON.stringify(taskMap));
+  } catch {
+    // ignore storage write failures
+  }
 };
 
 // ── Image Zoom Modal ──────────────────────────────────────────────────────────
@@ -231,171 +246,1111 @@ function ImageZoomModal({ pattern, isSaved, onToggleSave, onRegen, onClose }: {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type GenState = 'idle' | 'analyzing' | 'matching' | 'generating' | 'done';
+type GenState =
+  | 'idle'
+  | 'queued'
+  | 'inputReview'
+  | 'planning'
+  | 'textGenerating'
+  | 'promptRewrite'
+  | 'imageSubmit'
+  | 'imageWaitCallback'
+  | 'cancelRequested'
+  | 'finalizing'
+  | 'done'
+  | 'failed'
+  | 'interrupted'
+  | 'rejected'
+  | 'cancelled';
 
-const GEN_STEPS: Record<GenState, string> = {
-  idle:       '',
-  analyzing:  '正在分析创作诉求与意象语义...',
-  matching:   '正在匹配可用授权纹样与工艺参数...',
-  generating: '正在智能生成非遗纹样方案...',
-  done:       '生成完成，4 个方向可供选择',
+const TASK_STAGE_COPY: Record<Exclude<GenState, 'idle'>, string> = {
+  queued: '任务已进入队列，正在等待调度...',
+  inputReview: '正在校验输入内容与创作约束...',
+  planning: '正在拆解创作意图并规划纹样结构...',
+  textGenerating: '正在生成文本说明与创作结果...',
+  promptRewrite: '正在重写提示词并补充风格约束...',
+  imageSubmit: '正在提交图像生成请求...',
+  imageWaitCallback: '正在等待图像服务回调...',
+  cancelRequested: '已提交取消请求，等待任务收口...',
+  finalizing: '正在收尾并整理最终结果...',
+  done: '生成完成，可查看本轮结果',
+  failed: '生成失败，请稍后重试',
+  interrupted: '任务已中断，请重新发起创作',
+  rejected: '内容审核未通过',
+  cancelled: '任务已取消',
 };
+
+const TASK_STAGE_LABELS: Record<Exclude<GenState, 'idle' | 'done' | 'failed' | 'interrupted' | 'rejected' | 'cancelled'>, string> = {
+  queued: '排队',
+  inputReview: '审核',
+  planning: '规划',
+  textGenerating: '生成',
+  promptRewrite: '重写',
+  imageSubmit: '提交',
+  imageWaitCallback: '回调',
+  cancelRequested: '取消中',
+  finalizing: '收尾',
+};
+
+const ACTIVE_TASK_STEPS: Exclude<GenState, 'idle' | 'done' | 'failed' | 'interrupted' | 'rejected' | 'cancelled'>[] = [
+  'queued',
+  'inputReview',
+  'planning',
+  'textGenerating',
+  'promptRewrite',
+  'imageSubmit',
+  'imageWaitCallback',
+  'finalizing',
+];
+
+const TERMINAL_TASK_STATES = new Set<GenState>(['done', 'failed', 'interrupted', 'rejected', 'cancelled']);
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  PENDING: '排队中',
+  RUNNING: '进行中',
+  CANCEL_REQUESTED: '取消中',
+  COMPLETED: '已完成',
+  REJECTED: '已拒绝',
+  FAILED: '失败',
+  CANCELLED: '已取消',
+  INTERRUPTED: '已中断',
+};
+
+const TASK_PHASE_LABELS: Record<string, string> = {
+  QUEUED: '排队调度',
+  INPUT_REVIEW: '输入审核',
+  PLANNING: '任务规划',
+  TEXT_GENERATING: '文本生成',
+  PROMPT_REWRITE: '提示词重写',
+  IMAGE_SUBMIT: '提交图片任务',
+  IMAGE_WAIT_CALLBACK: '等待图片回调',
+  FINALIZING: '最终收尾',
+};
+
+const TASK_EVENT_LABELS: Record<string, string> = {
+  'queue.updated': '队列更新',
+  'task.phase': '阶段切换',
+  'message.delta': '文本增量',
+  'message.completed': '文本完成',
+  'artifact.pending': '图片提交成功',
+  'artifact.ready': '图片已就绪',
+  'artifact.failed': '图片生成失败',
+  'artifact.metadata.completed': '图片元数据补齐',
+  'task.completed': '任务完成',
+  'task.failed': '任务失败',
+  'task.rejected': '审核拒绝',
+  'task.cancelled': '任务取消',
+};
+
+const CONNECTION_STATE_LABELS: Record<SSEConnectionState, string> = {
+  connecting: '正在连接',
+  connected: '连接正常',
+  reconnecting: '正在重连',
+  closed: '连接已关闭',
+  error: '连接异常',
+};
+
+type RuntimeState = {
+  status: string | null;
+  phase: string | null;
+  queuePosition: number | null;
+  estimatedWaitMs: number | null;
+  lastEventType: string | null;
+  connectionState: SSEConnectionState | null;
+  connectionMessage: string | null;
+  requestId: string | null;
+  serviceType: string | null;
+  remoteTaskId: string | null;
+};
+
+const INITIAL_RUNTIME_STATE: RuntimeState = {
+  status: null,
+  phase: null,
+  queuePosition: null,
+  estimatedWaitMs: null,
+  lastEventType: null,
+  connectionState: null,
+  connectionMessage: null,
+  requestId: null,
+  serviceType: null,
+  remoteTaskId: null,
+};
+
+const resolveSessionGroup = (timeText?: string) => {
+  if (!timeText) return 'month' as const;
+  const sessionTime = new Date(timeText);
+  if (Number.isNaN(sessionTime.getTime())) {
+    return 'month' as const;
+  }
+
+  const diffDays = Math.floor((Date.now() - sessionTime.getTime()) / 86400000);
+  if (diffDays <= 0) return 'today' as const;
+  if (diffDays < 7) return 'week' as const;
+  return 'month' as const;
+};
+
+const formatSessionTime = (timeText?: string) => {
+  if (!timeText) return '';
+  return new Date(timeText)
+    .toLocaleString('zh', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    .replace(/\//g, '-');
+};
+
+const normalizeArtifactStatus = (status?: string | null): PatternStatus | null => {
+  if (!status) return null;
+  const normalized = status.trim().toUpperCase();
+  if (
+    normalized === 'READY' ||
+    normalized === 'DONE' ||
+    normalized === 'COMPLETED' ||
+    normalized === 'SUCCESS'
+  ) {
+    return 'ready';
+  }
+  if (
+    normalized === 'FAILED' ||
+    normalized === 'CANCELLED' ||
+    normalized === 'CANCELED'
+  ) {
+    return 'failed';
+  }
+  if (
+    normalized === 'PENDING' ||
+    normalized === 'PENDING_SUBMIT' ||
+    normalized === 'SUBMITTED' ||
+    normalized === 'SUBMITTING' ||
+    normalized === 'WAITING_CALLBACK' ||
+    normalized === 'IMAGE_WAIT_CALLBACK'
+  ) {
+    return 'pending';
+  }
+  return null;
+};
+
+const normalizeTaskStatus = (status?: string | null) => status?.trim().toUpperCase() || '';
+
+const shouldReplayTask = (status?: string | null) => {
+  const normalized = normalizeTaskStatus(status);
+  return !normalized || RECOVERABLE_TASK_STATUSES.has(normalized);
+};
+
+const shouldClearPersistedTask = (status?: string | null) =>
+  normalizeTaskStatus(status) === 'COMPLETED';
 
 export function ZhiHuiPage() {
   const { t, clearRedDot, addLibraryPattern, removeLibraryPattern, savedLibraryPatterns } = useApp();
   const navigate = useNavigate();
-  const [inputValue, setInputValue]             = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('云锦');
-  const [showCategoryMenu, setShowCategoryMenu] = useState(false);
-  const [showUploadMenu, setShowUploadMenu]     = useState(false);
-  const [activeSession, setActiveSession]       = useState<string | null>('new');
-  const [messages, setMessages]                 = useState<ConvMessage[]>([]);
-  const [genState, setGenState]                 = useState<GenState>('idle');
-  const [patterns, setPatterns]                 = useState<GeneratedPattern[]>([]);
-  const [zoomPattern, setZoomPattern]           = useState<GeneratedPattern | null>(null);
-  const [sessions, setSessions]                 = useState<Session[]>(MOCK_SESSIONS);
-  const [newSessionAnim, setNewSessionAnim]     = useState(false);
-  const [isStreaming, setIsStreaming]           = useState(false);
+  const selectedCategory = DEFAULT_CATEGORY.name;
+  const [inputValue, setInputValue] = useState('');
+  const [activeSession, setActiveSession] = useState<string | null>('new');
+  const [messages, setMessages] = useState<ConvMessage[]>([]);
+  const [genState, setGenState] = useState<GenState>('idle');
+  const [patterns, setPatterns] = useState<GeneratedPattern[]>([]);
+  const [zoomPattern, setZoomPattern] = useState<GeneratedPattern | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [newSessionAnim, setNewSessionAnim] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // AI 任务相关状态
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [assistantMsgId, setAssistantMsgId] = useState<string | null>(null);
   const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const [runtime, setRuntime] = useState<RuntimeState>(INITIAL_RUNTIME_STATE);
   const sseRef = useRef<{ close: () => void } | null>(null);
+  const currentTaskIdRef = useRef<string | null>(null);
+  const currentSessionIdRef = useRef<string | null>(null);
+  const runtimeRef = useRef<RuntimeState>(INITIAL_RUNTIME_STATE);
+  const patternsRef = useRef<GeneratedPattern[]>([]);
+  const sessionLoadVersionRef = useRef(0);
+  const lastEventIdRef = useRef<string | null>(null);
+  const assistantMsgIdRef = useRef<string | null>(null);
 
-  // MinIO 对象存储路径前缀
-  const IMAGE_BASE = '/api';
-  const getImageUrl = (objectKey: string): string => {
-    return `${IMAGE_BASE}/${objectKey}`;
+  useEffect(() => { currentSessionIdRef.current = currentSessionId; }, [currentSessionId]);
+  useEffect(() => { lastEventIdRef.current = lastEventId; }, [lastEventId]);
+  useEffect(() => { assistantMsgIdRef.current = assistantMsgId; }, [assistantMsgId]);
+  useEffect(() => { patternsRef.current = patterns; }, [patterns]);
+
+  // 真实图片读取路径
+  const getImageUrl = (objectKey: string): string => `/api/client/file/images/content?objectKey=${encodeURIComponent(objectKey)}`;
+
+  const updateLastEventId = (value: string | null) => {
+    setLastEventId(value);
+    lastEventIdRef.current = value;
   };
 
-  // SSE 订阅逻辑
-  const subscribeToTask = (taskId: string, assistantMsgId: string) => {
-    sseRef.current?.close();
+  const updateCurrentTaskId = (value: string | null) => {
+    currentTaskIdRef.current = value;
+    setCurrentTaskId(value);
+  };
 
-    setGenState('matching');
+  const updateCurrentSessionId = (value: string | null) => {
+    currentSessionIdRef.current = value;
+    setCurrentSessionId(value);
+  };
+
+  const readPersistedTask = useCallback((sessionId: string | null) => {
+    if (!sessionId) return null;
+    return readPersistedTaskMap()[sessionId] || null;
+  }, []);
+
+  const upsertPersistedTask = useCallback((
+    sessionId: string | null,
+    patch: Partial<PersistedTaskRecord> & { taskId?: string | null }
+  ) => {
+    if (!sessionId) return;
+
+    const taskMap = readPersistedTaskMap();
+    const prev = taskMap[sessionId];
+    const nextTaskId = patch.taskId?.trim() || prev?.taskId?.trim() || '';
+    if (!nextTaskId) return;
+
+    taskMap[sessionId] = {
+      sessionId,
+      taskId: nextTaskId,
+      assistantMessageId: patch.assistantMessageId ?? prev?.assistantMessageId ?? null,
+      lastEventId: patch.lastEventId ?? prev?.lastEventId ?? null,
+      status: patch.status ?? prev?.status ?? null,
+      phase: patch.phase ?? prev?.phase ?? null,
+      queuePosition: patch.queuePosition ?? prev?.queuePosition ?? null,
+      estimatedWaitMs: patch.estimatedWaitMs ?? prev?.estimatedWaitMs ?? null,
+      requestId: patch.requestId ?? prev?.requestId ?? null,
+      patterns: patch.patterns ?? prev?.patterns ?? [],
+      updatedAt: Date.now(),
+    };
+
+    writePersistedTaskMap(taskMap);
+  }, []);
+
+  const clearPersistedTask = useCallback((sessionId: string | null) => {
+    if (!sessionId) return;
+    const taskMap = readPersistedTaskMap();
+    if (!taskMap[sessionId]) return;
+    delete taskMap[sessionId];
+    writePersistedTaskMap(taskMap);
+  }, []);
+
+  const resetRuntime = () => {
+    runtimeRef.current = INITIAL_RUNTIME_STATE;
+    setRuntime(INITIAL_RUNTIME_STATE);
+  };
+
+  const patchRuntime = (patch: Partial<RuntimeState>) => {
+    setRuntime(prev => {
+      const next = { ...prev, ...patch };
+      runtimeRef.current = next;
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!currentSessionId || !currentTaskId) {
+      return;
+    }
+
+    upsertPersistedTask(currentSessionId, {
+      taskId: currentTaskId,
+      assistantMessageId: assistantMsgId,
+      lastEventId,
+      status: runtime.status,
+      phase: runtime.phase,
+      queuePosition: runtime.queuePosition,
+      estimatedWaitMs: runtime.estimatedWaitMs,
+      requestId: runtime.requestId,
+      patterns,
+    });
+  }, [
+    assistantMsgId,
+    currentSessionId,
+    currentTaskId,
+    lastEventId,
+    patterns,
+    runtime.estimatedWaitMs,
+    runtime.phase,
+    runtime.queuePosition,
+    runtime.requestId,
+    runtime.status,
+    upsertPersistedTask,
+  ]);
+
+  const normalizePatternTags = (tags?: string[], fallbackTag?: string) => {
+    const merged = [...(tags || []), ...(fallbackTag ? [fallbackTag] : [])].filter(Boolean);
+    return Array.from(new Set(merged));
+  };
+
+  const normalizeConversationRole = (role?: string): 'user' | 'system' =>
+    role === 'user' ? 'user' : 'system';
+
+  const normalizeSseImages = (images?: Array<string | SSEImageInfo>): ConversationImage[] => {
+    if (!Array.isArray(images)) return [];
+    return images
+      .map((image): ConversationImage | null => {
+        if (typeof image === 'string') {
+          return { objectKey: image };
+        }
+        if (!image?.objectKey) {
+          return null;
+        }
+        return {
+          recordId: image.recordId,
+          objectKey: image.objectKey,
+          title: image.title,
+          description: image.description,
+          tags: image.tags,
+          width: image.width,
+          height: image.height,
+        } satisfies ConversationImage;
+      })
+      .filter((image): image is ConversationImage => image !== null);
+  };
+
+  const formatTaskStatus = (status?: string | null) =>
+    status ? TASK_STATUS_LABELS[status] || status : '';
+
+  const formatTaskPhase = (phase?: string | null) =>
+    phase ? TASK_PHASE_LABELS[phase] || phase : '';
+
+  const formatTaskEvent = (eventType?: string | null) =>
+    eventType ? TASK_EVENT_LABELS[eventType] || eventType : '';
+
+  const formatConnectionState = (state?: SSEConnectionState | null, message?: string | null) => {
+    if (!state) return '';
+    return message ? `${CONNECTION_STATE_LABELS[state]} · ${message}` : CONNECTION_STATE_LABELS[state];
+  };
+
+  const formatEstimatedWait = (estimatedWaitMs?: number | null) => {
+    if (estimatedWaitMs == null) return '';
+    if (estimatedWaitMs < 1000) return `${estimatedWaitMs} ms`;
+    if (estimatedWaitMs < 60000) return `${Math.ceil(estimatedWaitMs / 1000)} 秒`;
+    return `${Math.ceil(estimatedWaitMs / 60000)} 分钟`;
+  };
+
+  const buildPatternFromImage = (
+    image: ConversationImage,
+    options: {
+      title?: string;
+      desc?: string;
+      tags?: string[];
+      objectKeyFallback?: string;
+      requestId?: string;
+      recordId?: string;
+    } = {}
+  ): GeneratedPattern | null => {
+    const objectKey = image.objectKey || options.objectKeyFallback || '';
+    if (!objectKey) return null;
+    const recordId = image.recordId || options.recordId;
+    const requestId = options.requestId;
+    return {
+      id: recordId || (requestId ? `${requestId}:${objectKey}` : objectKey),
+      status: 'ready',
+      requestId,
+      recordId,
+      title: image.title || options.title || '生成纹样',
+      desc: image.description || options.desc || '',
+      tags: normalizePatternTags([...(image.tags || []), ...(options.tags || [])], selectedCategory),
+      style: image.tags?.[0] || 'AI生成',
+      scene: image.description || options.desc || '智绘创作',
+      imageUrl: getImageUrl(objectKey),
+      objectKey,
+    };
+  };
+
+  const buildPatternFromObjectKey = (
+    objectKey: string,
+    options: { title?: string; desc?: string; tags?: string[]; requestId?: string; recordId?: string } = {}
+  ): GeneratedPattern => ({
+    id: options.recordId || (options.requestId ? `${options.requestId}:${objectKey}` : objectKey),
+    status: 'ready',
+    requestId: options.requestId,
+    recordId: options.recordId,
+    title: options.title || '生成纹样',
+    desc: options.desc || '',
+    tags: normalizePatternTags(options.tags, selectedCategory),
+    style: 'AI生成',
+    scene: options.desc || '智绘创作',
+    imageUrl: getImageUrl(objectKey),
+    objectKey,
+  });
+
+  const buildPendingPattern = (
+    requestId: string,
+    options: { title?: string; desc?: string; tags?: string[]; recordId?: string } = {}
+  ): GeneratedPattern => ({
+    id: options.recordId || requestId,
+    status: 'pending',
+    requestId,
+    recordId: options.recordId,
+    title: options.title || '纹样生成中',
+    desc: options.desc || '图片正在生成，完成后会自动替换为成图',
+    tags: normalizePatternTags(options.tags, selectedCategory),
+    style: '生成中',
+    scene: '等待回调',
+    imageUrl: '',
+  });
+
+  const buildFailedPattern = (
+    requestId: string,
+    options: {
+      title?: string;
+      desc?: string;
+      tags?: string[];
+      recordId?: string;
+      errorCode?: string;
+      errorMessage?: string;
+      retriable?: boolean;
+    } = {}
+  ): GeneratedPattern => ({
+    id: options.recordId || requestId,
+    status: 'failed',
+    requestId,
+    recordId: options.recordId,
+    title: options.title || '纹样生成失败',
+    desc: options.desc || '图片生成未成功，可重新发起生成。',
+    tags: normalizePatternTags(options.tags, selectedCategory),
+    style: '生成失败',
+    scene: '等待重试',
+    imageUrl: '',
+    errorCode: options.errorCode,
+    errorMessage: options.errorMessage,
+    retriable: options.retriable,
+  });
+
+  const getPatternAliases = (pattern: Pick<GeneratedPattern, 'id' | 'requestId' | 'recordId' | 'objectKey'>) =>
+    [pattern.id, pattern.requestId, pattern.recordId, pattern.objectKey].filter(
+      (value): value is string => Boolean(value)
+    );
+
+  const mergePatternCollections = (base: GeneratedPattern[], incoming: GeneratedPattern[]) => {
+    if (incoming.length === 0) return base;
+    const next = [...base];
+    incoming.forEach(item => {
+      const itemAliases = getPatternAliases(item);
+      const matchIndex = next.findIndex(existing => {
+        const existingAliases = getPatternAliases(existing);
+        if (itemAliases.some(alias => existingAliases.includes(alias))) {
+          return true;
+        }
+        if (item.requestId && existing.requestId === item.requestId) {
+          return existing.status !== 'ready';
+        }
+        return false;
+      });
+
+      if (matchIndex >= 0) {
+        const existing = next[matchIndex];
+        next[matchIndex] = {
+          ...existing,
+          ...item,
+          id: existing.id || item.id,
+          requestId: existing.requestId || item.requestId,
+          recordId: existing.recordId || item.recordId,
+          objectKey: existing.objectKey || item.objectKey,
+        };
+        return;
+      }
+
+      next.push(item);
+    });
+    return next;
+  };
+
+  const mergePatterns = (incoming: GeneratedPattern[]) => {
+    if (incoming.length === 0) return;
+    setPatterns(prev => mergePatternCollections(prev, incoming));
+  };
+
+  const mapLifecycleState = (payload: {
+    status?: string | null;
+    phase?: string | null;
+    eventType?: string | null;
+    messageType?: string | null;
+  }): GenState => {
+    const tokens = [payload.status, payload.phase, payload.eventType, payload.messageType]
+      .filter((item): item is string => Boolean(item))
+      .map(item => item.toUpperCase());
+
+    if (tokens.includes('CANCEL_REQUESTED')) return 'cancelRequested';
+
+    const terminalHit = tokens.find(token => ['FAILED', 'INTERRUPTED', 'REJECTED', 'CANCELLED', 'CANCELED', 'COMPLETED', 'DONE', 'SUCCESS', 'SUCCEEDED'].includes(token));
+    if (terminalHit) {
+      if (['FAILED'].includes(terminalHit)) return 'failed';
+      if (['INTERRUPTED'].includes(terminalHit)) return 'interrupted';
+      if (['REJECTED'].includes(terminalHit)) return 'rejected';
+      if (['CANCELLED', 'CANCELED'].includes(terminalHit)) return 'cancelled';
+      return 'done';
+    }
+
+    if (tokens.includes('QUEUED') || tokens.includes('QUEUE.UPDATED')) return 'queued';
+    if (tokens.includes('INPUT_REVIEW')) return 'inputReview';
+    if (tokens.includes('PLANNING')) return 'planning';
+    if (tokens.includes('PROMPT_REWRITE')) return 'promptRewrite';
+    if (tokens.includes('IMAGE_SUBMIT')) return 'imageSubmit';
+    if (tokens.includes('IMAGE_WAIT_CALLBACK')) return 'imageWaitCallback';
+    if (tokens.includes('FINALIZING')) return 'finalizing';
+    if (tokens.includes('TEXT_GENERATING') || tokens.includes('MESSAGE.DELTA')) return 'textGenerating';
+    if (tokens.includes('ARTIFACT.READY')) return 'finalizing';
+    if (tokens.includes('ARTIFACT.METADATA.COMPLETED')) return 'finalizing';
+    if (tokens.includes('MESSAGE.COMPLETED')) return 'finalizing';
+    return 'planning';
+  };
+
+  const isTerminalState = (state: GenState) => TERMINAL_TASK_STATES.has(state);
+
+  const applyAssistantText = (messageId: string | null, nextText: string) => {
+    if (!messageId) return;
+    setMessages(prev => prev.map(message =>
+      message.id === messageId ? { ...message, content: nextText } : message
+    ));
+  };
+
+  const extractPatternsFromImages = (
+    images: ConversationImage[] | undefined,
+    options: { title?: string; desc?: string; requestId?: string; recordId?: string; tags?: string[] } = {}
+  ): GeneratedPattern[] => {
+    if (!images || images.length === 0) return [];
+    return images
+      .map(image => buildPatternFromImage(image, options))
+      .filter((item): item is GeneratedPattern => Boolean(item));
+  };
+
+  const extractPatternsFromConversation = (conversation: ConvMessage[]) => {
+    const nextPatterns: GeneratedPattern[] = [];
+    conversation.forEach(message => {
+      if (message.role === 'user') return;
+
+      const requestId = message.requestId || message.taskId || message.artifact?.requestId;
+      const recordId = message.recordId || message.artifact?.recordId;
+      const recordIds = Array.from(
+        new Set([
+          ...(message.recordIds || []),
+          ...(message.artifact?.recordIds || []),
+        ].filter((value): value is string => Boolean(value)))
+      );
+      const title = message.content || message.artifact?.promptSummary || '生成纹样';
+      const desc = message.artifact?.promptSummary || message.content || '';
+      const tags = message.category ? [message.category] : [selectedCategory];
+      const artifactStatus = normalizeArtifactStatus(message.artifact?.status || message.artifactStatus || message.status);
+
+      if (message.images?.length) {
+        nextPatterns.push(
+          ...extractPatternsFromImages(message.images, {
+            title,
+            desc,
+            requestId: requestId || undefined,
+            recordId: recordId || undefined,
+            tags,
+          })
+        );
+      }
+
+      if (artifactStatus === 'pending') {
+        const pendingRecordIds = recordIds.length > 0 ? recordIds : requestId ? [requestId] : [];
+        nextPatterns.push(
+          ...pendingRecordIds.map(itemId => buildPendingPattern(requestId || itemId, {
+            title,
+            desc: desc || '图片正在生成，完成后会自动替换为成图',
+            tags,
+            recordId: itemId,
+          }))
+        );
+      }
+
+      if (artifactStatus === 'failed') {
+        const failedRecordIds = recordIds.length > 0 ? recordIds : recordId ? [recordId] : [];
+        nextPatterns.push(
+          ...failedRecordIds.map(itemId => buildFailedPattern(requestId || itemId, {
+            title,
+            desc: desc || '图片生成未成功，可重新发起生成。',
+            tags,
+            recordId: itemId,
+          }))
+        );
+      }
+    });
+    return nextPatterns;
+  };
+
+  const resolveLatestAssistantMessageId = (conversation: ConvMessage[]) => {
+    for (let index = conversation.length - 1; index >= 0; index -= 1) {
+      const message = conversation[index];
+      if (message.role === 'system') {
+        return message.id;
+      }
+    }
+    return null;
+  };
+
+  const buildRegeneratePrompt = (pattern: GeneratedPattern) => {
+    return [
+      `请基于以下方向重新生成一组相近但有差异的${selectedCategory}纹样：`,
+      `方向标题：${pattern.title}`,
+      pattern.desc ? `方向说明：${pattern.desc}` : null,
+      pattern.tags.length > 0 ? `关键词：${pattern.tags.join('、')}` : null,
+      '请保留核心气质，但调整构图、局部细节和节奏变化。',
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n');
+  };
+
+  // 断线恢复时先拉一次任务快照，用它补齐文本、运行态和已落库的图片资源。
+  // 这里必须校验 taskId 仍然是当前任务，避免旧请求在切会话后回写页面。
+  const syncTaskSnapshot = async (taskId: string, assistantIdHint?: string | null) => {
+    const res = await chatService.getTaskSnapshot(taskId);
+    if (currentTaskIdRef.current !== taskId) {
+      return null;
+    }
+
+    const snapshot = res.data;
+    const snapshotState = mapLifecycleState({
+      status: snapshot.status,
+      phase: snapshot.phase,
+    });
+
+    if (snapshot.lastEventId) {
+      updateLastEventId(snapshot.lastEventId);
+    }
+
+    if (!assistantMsgIdRef.current && snapshot.assistantMessageId) {
+      setAssistantMsgId(snapshot.assistantMessageId);
+    }
+
+    const targetAssistantId =
+      assistantIdHint || assistantMsgIdRef.current || snapshot.assistantMessageId || null;
+    const nextAssistantText = snapshot.assistantText || snapshot.artifact?.promptSummary || '';
+    if (nextAssistantText) {
+      applyAssistantText(targetAssistantId, nextAssistantText);
+    }
+
+    patchRuntime({
+      status: snapshot.status ?? null,
+      phase: snapshot.phase ?? null,
+      queuePosition: snapshot.queuePosition ?? null,
+      estimatedWaitMs: snapshot.estimatedWaitMs ?? null,
+      requestId: snapshot.artifact?.requestId ?? null,
+    });
+
+    upsertPersistedTask(snapshot.sessionId || currentSessionIdRef.current, {
+      taskId: snapshot.taskId || taskId,
+      assistantMessageId: snapshot.assistantMessageId || targetAssistantId,
+      lastEventId: snapshot.lastEventId || lastEventIdRef.current,
+      status: snapshot.status ?? null,
+      phase: snapshot.phase ?? null,
+      queuePosition: snapshot.queuePosition ?? null,
+      estimatedWaitMs: snapshot.estimatedWaitMs ?? null,
+      requestId: snapshot.artifact?.requestId ?? null,
+    });
+
+    if (snapshot.artifact) {
+      const artifact = snapshot.artifact;
+      const requestId = artifact.requestId || snapshot.taskId;
+      const artifactStatus = normalizeArtifactStatus(artifact.status);
+      const artifactRecordIds = Array.from(
+        new Set([
+          ...(artifact.recordIds || []),
+          artifact.recordId,
+        ].filter((value): value is string => Boolean(value)))
+      );
+      const artifactKeys = Array.from(
+        new Set(
+          [artifact.objectKey, ...(artifact.objectKeys || [])].filter(
+            (objectKey): objectKey is string => Boolean(objectKey)
+          )
+        )
+      );
+      if (artifactStatus === 'ready' && artifactKeys.length > 0) {
+        mergePatterns(
+          artifactKeys.map(objectKey =>
+            buildPatternFromObjectKey(objectKey, {
+              title: artifact.promptSummary || nextAssistantText || '生成纹样',
+              desc: artifact.promptSummary || nextAssistantText || '',
+              tags: [selectedCategory],
+              requestId,
+              recordId: artifact.recordId,
+            })
+          )
+        );
+      } else if (artifactStatus === 'pending') {
+        mergePatterns([
+          ...(artifactRecordIds.length > 0 ? artifactRecordIds : [requestId]).map(itemId =>
+            buildPendingPattern(requestId, {
+              title: artifact.promptSummary || nextAssistantText || '纹样生成中',
+              desc: artifact.promptSummary || nextAssistantText || '图片正在生成，完成后会自动替换为成图',
+              tags: [selectedCategory],
+              recordId: itemId === requestId ? artifact.recordId : itemId,
+            })
+          ),
+        ]);
+      } else if (artifactStatus === 'failed') {
+        mergePatterns([
+          ...(artifactRecordIds.length > 0 ? artifactRecordIds : [requestId]).map(itemId =>
+            buildFailedPattern(requestId, {
+              title: artifact.promptSummary || nextAssistantText || '纹样生成失败',
+              desc: artifact.promptSummary || nextAssistantText || '图片生成未成功，可重新发起生成。',
+              tags: [selectedCategory],
+              recordId: itemId === requestId ? artifact.recordId : itemId,
+              errorCode: snapshot.error?.code,
+              errorMessage: snapshot.error?.message,
+              retriable: snapshot.error?.retriable,
+            })
+          ),
+        ]);
+      }
+    }
+
+    setGenState(snapshotState);
+    return { snapshot, snapshotState, targetAssistantId };
+  };
+
+  const updateTaskFromMessage = (msg: SSEMessage, assistantId: string) => {
+    const previousRuntime = runtimeRef.current;
+    const streamCursor = msg.id || msg.streamId || null;
+    if (streamCursor) {
+      updateLastEventId(streamCursor);
+    }
+
+    const runtimePatch: Partial<RuntimeState> = {
+      lastEventType: msg.type,
+    };
+    if (msg.phase) runtimePatch.phase = msg.phase;
+    if ('position' in msg) runtimePatch.queuePosition = msg.position ?? null;
+    if ('estimatedWaitMs' in msg) runtimePatch.estimatedWaitMs = msg.estimatedWaitMs ?? null;
+    if (msg.requestId) runtimePatch.requestId = msg.requestId;
+    if (msg.serviceType) runtimePatch.serviceType = msg.serviceType;
+    if (msg.remoteTaskId) runtimePatch.remoteTaskId = msg.remoteTaskId;
+
+    switch (msg.type) {
+      case 'queue.updated':
+        runtimePatch.status = 'PENDING';
+        break;
+      case 'task.phase':
+      case 'message.delta':
+      case 'message.completed':
+      case 'artifact.pending':
+      case 'artifact.ready':
+      case 'artifact.failed':
+      case 'artifact.metadata.completed':
+        runtimePatch.status = previousRuntime.status === 'CANCEL_REQUESTED' ? 'CANCEL_REQUESTED' : 'RUNNING';
+        break;
+      case 'task.completed':
+        runtimePatch.status = 'COMPLETED';
+        break;
+      case 'task.failed':
+        runtimePatch.status = 'FAILED';
+        break;
+      case 'heartbeat':
+        runtimePatch.status = previousRuntime.status;
+        break;
+      case 'task.rejected':
+        runtimePatch.status = 'REJECTED';
+        break;
+      case 'task.cancelled':
+        runtimePatch.status = 'CANCELLED';
+        break;
+    }
+    patchRuntime(runtimePatch);
+
+    const lifecycleState = mapLifecycleState({
+      status: runtimePatch.status || previousRuntime.status,
+      phase: msg.phase,
+      eventType: msg.type,
+    });
+    if (lifecycleState !== 'planning' || msg.type === 'queue.updated') {
+      setGenState(lifecycleState);
+    }
+
+    switch (msg.type) {
+      case 'queue.updated':
+        setGenState('queued');
+        break;
+      case 'task.phase':
+        setGenState(mapLifecycleState({
+          status: runtimePatch.status || previousRuntime.status,
+          phase: msg.phase,
+          eventType: msg.type,
+        }));
+        break;
+      case 'message.delta':
+        setGenState('textGenerating');
+        setMessages(prev => prev.map(message =>
+          message.id === assistantId
+            ? { ...message, content: message.content + (msg.delta || '') }
+            : message
+        ));
+        break;
+      case 'message.completed':
+        setGenState('finalizing');
+        break;
+      case 'artifact.pending':
+        setGenState('imageWaitCallback');
+        patchRuntime({ phase: 'IMAGE_WAIT_CALLBACK' });
+        {
+          const requestId = msg.requestId || msg.taskId;
+          const pendingRecordIds = Array.from(
+            new Set([
+              ...(msg.recordIds || []),
+              msg.recordId,
+            ].filter((value): value is string => Boolean(value)))
+          );
+
+          mergePatterns(
+            (pendingRecordIds.length > 0 ? pendingRecordIds : [requestId]).map(itemId =>
+              buildPendingPattern(requestId, {
+                title: msg.promptSummary || '纹样生成中',
+                desc: msg.promptSummary || '图片正在生成，完成后会自动替换为成图',
+                tags: [selectedCategory],
+                recordId: itemId === requestId ? msg.recordId : itemId,
+              })
+            )
+          );
+        }
+        break;
+      case 'artifact.ready': {
+        const artifactImages = normalizeSseImages(msg.images);
+        const requestId = msg.requestId || msg.taskId;
+        const imagePatterns = artifactImages.length > 0
+          ? extractPatternsFromImages(artifactImages, {
+              title: msg.promptSummary || '生成纹样',
+              desc: msg.promptSummary || '',
+              tags: [selectedCategory],
+              requestId,
+              recordId: msg.recordId,
+            })
+          : [];
+
+        const objectKeys = Array.from(
+          new Set(
+            (Array.isArray(msg.objectKeys) && msg.objectKeys.length > 0
+              ? msg.objectKeys
+              : msg.objectKey
+                ? [msg.objectKey]
+                : []
+            ).filter((objectKey): objectKey is string => Boolean(objectKey))
+          )
+        );
+
+        const keyPatterns = objectKeys.map(objectKey =>
+          buildPatternFromObjectKey(objectKey, {
+            title: msg.promptSummary || '生成纹样',
+            desc: msg.promptSummary || '',
+            tags: [selectedCategory],
+            requestId,
+            recordId: msg.recordId,
+          })
+        );
+
+        mergePatterns([...imagePatterns, ...keyPatterns]);
+        setGenState('finalizing');
+        break;
+      }
+      case 'artifact.failed': {
+        const requestId = msg.requestId || msg.taskId;
+        const failedRecordIds = Array.from(
+          new Set([
+            ...(msg.recordIds || []),
+            msg.recordId,
+            msg.objectKey,
+          ].filter((value): value is string => Boolean(value)))
+        );
+
+        mergePatterns(
+          (failedRecordIds.length > 0 ? failedRecordIds : [requestId]).map(itemId =>
+            buildFailedPattern(requestId, {
+              title: msg.promptSummary || '纹样生成失败',
+              desc: msg.promptSummary || '图片生成未成功，可重新发起生成。',
+              tags: [selectedCategory],
+              recordId: itemId === requestId ? msg.recordId : itemId,
+              errorCode: msg.code,
+              errorMessage: msg.message || msg.errorMessage,
+              retriable: msg.retriable,
+            })
+          )
+        );
+        setGenState('failed');
+        break;
+      }
+      case 'artifact.metadata.completed':
+        setGenState('finalizing');
+        break;
+      case 'task.completed':
+        setGenState('done');
+        setIsStreaming(false);
+        clearPersistedTask(msg.sessionId || currentSessionIdRef.current);
+        updateCurrentTaskId(null);
+        closeTaskStream();
+        break;
+      case 'task.failed':
+        setGenState('failed');
+        setIsStreaming(false);
+        upsertPersistedTask(msg.sessionId || currentSessionIdRef.current, {
+          taskId: msg.taskId,
+          assistantMessageId: assistantMsgIdRef.current,
+          lastEventId: streamCursor || lastEventIdRef.current,
+          status: 'FAILED',
+          phase: msg.phase || runtimeRef.current.phase,
+          queuePosition: runtimeRef.current.queuePosition,
+          estimatedWaitMs: runtimeRef.current.estimatedWaitMs,
+          requestId: msg.requestId || runtimeRef.current.requestId,
+          patterns: patternsRef.current,
+        });
+        updateCurrentTaskId(null);
+        closeTaskStream();
+        toast.error(msg.message || msg.errorMessage || '生成失败');
+        break;
+      case 'task.rejected':
+        setGenState('rejected');
+        setIsStreaming(false);
+        upsertPersistedTask(msg.sessionId || currentSessionIdRef.current, {
+          taskId: msg.taskId,
+          assistantMessageId: assistantMsgIdRef.current,
+          lastEventId: streamCursor || lastEventIdRef.current,
+          status: 'REJECTED',
+          phase: msg.phase || runtimeRef.current.phase,
+          queuePosition: runtimeRef.current.queuePosition,
+          estimatedWaitMs: runtimeRef.current.estimatedWaitMs,
+          requestId: msg.requestId || runtimeRef.current.requestId,
+          patterns: patternsRef.current,
+        });
+        updateCurrentTaskId(null);
+        closeTaskStream();
+        toast.error(msg.displayText || '内容审核未通过');
+        break;
+      case 'task.cancelled':
+        setGenState('cancelled');
+        setIsStreaming(false);
+        upsertPersistedTask(msg.sessionId || currentSessionIdRef.current, {
+          taskId: msg.taskId,
+          assistantMessageId: assistantMsgIdRef.current,
+          lastEventId: streamCursor || lastEventIdRef.current,
+          status: 'CANCELLED',
+          phase: msg.phase || runtimeRef.current.phase,
+          queuePosition: runtimeRef.current.queuePosition,
+          estimatedWaitMs: runtimeRef.current.estimatedWaitMs,
+          requestId: msg.requestId || runtimeRef.current.requestId,
+          patterns: patternsRef.current,
+        });
+        updateCurrentTaskId(null);
+        closeTaskStream();
+        toast.info('任务已取消');
+        break;
+    }
+  };
+
+  const closeTaskStream = () => {
+    sseRef.current?.close();
+    sseRef.current = null;
+  };
+
+  const clearTaskState = () => {
+    closeTaskStream();
+    updateCurrentTaskId(null);
+    setAssistantMsgId(null);
+    updateLastEventId(null);
+    resetRuntime();
+    setIsStreaming(false);
+  };
+
+  const syncTaskRecovery = async (taskId: string, assistantIdHint?: string | null, silent = true) => {
+    try {
+      const recovery = await syncTaskSnapshot(taskId, assistantIdHint);
+      if (!recovery) {
+        return;
+      }
+
+      const { snapshotState } = recovery;
+      if (isTerminalState(snapshotState)) {
+        setIsStreaming(false);
+        if (shouldClearPersistedTask(recovery.snapshot.status)) {
+          clearPersistedTask(recovery.snapshot.sessionId || currentSessionIdRef.current);
+        }
+        updateCurrentTaskId(null);
+        closeTaskStream();
+      }
+    } catch (err: any) {
+      if (!silent) {
+        toast.error(err?.message || '任务流恢复失败');
+      }
+    }
+  };
+
+  const subscribeToTask = (taskId: string, assistantId: string | null, resumeLastEventId?: string) => {
+    closeTaskStream();
 
     sseRef.current = chatService.subscribeEvents(
       taskId,
-      (msg) => {
-        switch (msg.type) {
-          case 'task.phase':
-            if (msg.phase === 'TEXT_GENERATING') {
-              setGenState('generating');
-            } else if (msg.phase === 'FINALIZING') {
-              setGenState('done');
-            }
-            break;
-
-          case 'message.delta':
-            setMessages(prev => prev.map(m =>
-              m.id === assistantMsgId
-                ? { ...m, content: m.content + (msg.delta || '') }
-                : m
-            ));
-            break;
-
-          case 'message.completed':
-            setGenState('done');
-            break;
-
-          case 'artifact.ready':
-            if (msg.objectKeys && msg.objectKeys.length > 0) {
-              const newPattern: GeneratedPattern = {
-                id: msg.requestId || `gen_${Date.now()}`,
-                title: msg.promptSummary || '生成纹样',
-                desc: msg.promptSummary || '',
-                tags: [selectedCategory],
-                style: 'AI生成',
-                scene: '智绘创作',
-                imageUrl: getImageUrl(msg.objectKey || msg.objectKeys[0]),
-              };
-              setPatterns(prev => [...prev, newPattern]);
-            }
-            break;
-
-          case 'task.completed':
-            setIsStreaming(false);
-            setGenState('done');
-            sseRef.current?.close();
-            if (msg.seq !== undefined) {
-              setLastEventId(`${Date.now()}-${msg.seq}`);
-            }
-            break;
-
-          case 'task.failed':
-            setIsStreaming(false);
-            setGenState('idle');
-            toast.error(msg.errorMessage || '生成失败');
-            sseRef.current?.close();
-            break;
-
-          case 'task.rejected':
-            setIsStreaming(false);
-            setGenState('idle');
-            toast.error(msg.displayText || '内容审核未通过');
-            sseRef.current?.close();
-            break;
-
-          case 'task.cancelled':
-            setIsStreaming(false);
-            setGenState('idle');
-            toast.info('任务已取消');
-            sseRef.current?.close();
-            break;
-        }
-      },
-      { lastEventId: lastEventId || undefined }
+      (msg) => updateTaskFromMessage(msg, assistantId || assistantMsgIdRef.current || ''),
+      {
+        lastEventId: resumeLastEventId || lastEventIdRef.current || undefined,
+        onStatus: (event) => {
+          patchRuntime({
+            connectionState: event.state,
+            connectionMessage: event.message ?? null,
+          });
+          if (event.lastEventId) {
+            updateLastEventId(event.lastEventId);
+          }
+          if (event.state === 'reconnecting' || (event.state === 'connected' && event.attempt > 1)) {
+            void syncTaskRecovery(taskId, assistantId, true);
+          }
+        },
+        onError: (event) => {
+          patchRuntime({
+            connectionState: 'error',
+            connectionMessage: event.message ?? null,
+          });
+        },
+      }
     );
   };
 
-  useEffect(() => { clearRedDot('zhihui'); }, []);
+  // 侧边栏只展示后端真实会话，接口失败时保持空列表，不再回退到演示数据。
+  const refreshSessions = useCallback(async () => {
+    setIsLoadingSessions(true);
+    try {
+      const res = await chatService.listSessions({ page: 1, size: 50 });
+      const nextSessions: Session[] = (res.data?.records || []).map(session => ({
+        id: session.sessionId,
+        title: session.title || '新对话',
+        category: DEFAULT_CATEGORY.name,
+        time: formatSessionTime(session.lastMessageAt || session.createTime),
+        group: resolveSessionGroup(session.lastMessageAt || session.createTime),
+      }));
+      setSessions(nextSessions);
+    } catch {
+      setSessions([]);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, []);
+
+  useEffect(() => { clearRedDot('zhihui'); }, [clearRedDot]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, patterns]);
 
-  // 挂载时加载会话列表
   useEffect(() => {
-    setIsLoadingSessions(true);
-    chatService.listSessions({ page: 1, size: 50 })
-      .then(res => {
-        const now = new Date();
-        const list: Session[] = (res.data?.records || []).map(s => {
-          const msgTime = new Date(s.lastMessageAt || s.createTime);
-          let group: Session['group'] = 'month';
-          const diffDays = Math.floor((now.getTime() - msgTime.getTime()) / 86400000);
-          if (diffDays === 0) group = 'today';
-          else if (diffDays < 7) group = 'week';
-          return {
-            id: s.sessionId,
-            title: s.title || '新对话',
-            category: '云锦',
-            time: s.lastMessageAt
-              ? new Date(s.lastMessageAt).toLocaleString('zh', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-')
-              : '',
-            group,
-          };
-        });
-        setSessions(list);
-      })
-      .catch(() => {
-        // 失败时保留模拟数据
-      })
-      .finally(() => setIsLoadingSessions(false));
-  }, []);
+    void refreshSessions();
+  }, [refreshSessions]);
 
   // 组件卸载时清理 SSE 连接
   useEffect(() => {
     return () => {
-      sseRef.current?.close();
+      closeTaskStream();
     };
   }, []);
 
   const isSavedGlobally = (id: string) => savedLibraryPatterns.some(p => p.id === id);
 
   const handleToggleSave = (pattern: GeneratedPattern) => {
+    if (pattern.status !== 'ready') {
+      return;
+    }
     if (isSavedGlobally(pattern.id)) {
       removeLibraryPattern(pattern.id);
       toast.info(`已从我的纹样移除「${pattern.title}」`);
@@ -423,80 +1378,207 @@ export function ZhiHuiPage() {
     }
   };
 
-  // 加载会话历史
+  // 会话切换需要防止旧请求回写，所以用递增版本号拦截陈旧响应。
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const loadSession = async (sessionId: string) => {
-    sseRef.current?.close();
-    setCurrentTaskId(null);
-    setIsStreaming(false);
-    setGenState('idle');
-    setCurrentSessionId(sessionId);
+    const loadVersion = sessionLoadVersionRef.current + 1;
+    sessionLoadVersionRef.current = loadVersion;
+
+    clearTaskState();
+    updateCurrentSessionId(sessionId);
+    setActiveSession(sessionId);
     setIsLoadingHistory(true);
-    setMessages([]); setPatterns([]);
 
     try {
       const res = await chatService.getConversationMessages(sessionId);
+      if (sessionLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+
       const msgs: ConvMessage[] = (res.data || []).map(m => ({
         id: m.messageId,
-        role: m.role as 'user' | 'system',
+        role: normalizeConversationRole(m.role),
         content: m.text,
+        category: DEFAULT_CATEGORY.name,
         timestamp: new Date(m.createTime).toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }),
+        taskId: m.taskId,
+        assistantMessageId: m.assistantMessageId,
+        lastEventId: m.lastEventId,
+        lastEventSeq: m.lastEventSeq,
+        status: m.status,
+        phase: m.phase,
+        queuePosition: m.queuePosition ?? null,
+        estimatedWaitMs: m.estimatedWaitMs ?? null,
+        requestId: m.requestId,
+        recordId: m.recordId,
+        recordIds: m.recordIds,
+        artifactStatus: m.artifactStatus,
+        artifact: m.artifact
+          ? {
+              status: m.artifact.status,
+              requestId: m.artifact.requestId,
+              recordId: m.artifact.recordId,
+              recordIds: m.artifact.recordIds,
+              objectKey: m.artifact.objectKey,
+              objectKeys: m.artifact.objectKeys,
+              promptSummary: m.artifact.promptSummary,
+              remoteStatus: m.artifact.remoteStatus,
+              width: m.artifact.width,
+              height: m.artifact.height,
+              nsfwDetected: m.artifact.nsfwDetected,
+            }
+          : undefined,
+        images: m.images?.map(image => ({
+          recordId: image.recordId,
+          objectKey: image.objectKey,
+          title: image.title,
+          description: image.description,
+          tags: image.tags,
+          width: image.width,
+          height: image.height,
+        })),
       }));
+      let persistedTask = readPersistedTask(sessionId);
+      if (persistedTask && shouldClearPersistedTask(persistedTask.status)) {
+        clearPersistedTask(sessionId);
+        persistedTask = null;
+      }
+
+      const latestAssistantId = resolveLatestAssistantMessageId(msgs);
       setMessages(msgs);
-      setGenState(msgs.length > 0 ? 'done' : 'idle');
+      setPatterns(
+        mergePatternCollections(
+          persistedTask?.patterns || [],
+          extractPatternsFromConversation(msgs)
+        )
+      );
+      setAssistantMsgId(latestAssistantId || persistedTask?.assistantMessageId || null);
+
+      if (!persistedTask?.taskId) {
+        setGenState('idle');
+        setIsStreaming(false);
+        return;
+      }
+
+      updateCurrentTaskId(persistedTask.taskId);
+      updateLastEventId(persistedTask.lastEventId);
+      patchRuntime({
+        status: persistedTask.status,
+        phase: persistedTask.phase,
+        queuePosition: persistedTask.queuePosition,
+        estimatedWaitMs: persistedTask.estimatedWaitMs,
+        requestId: persistedTask.requestId,
+      });
+      setGenState(mapLifecycleState({
+        status: persistedTask.status,
+        phase: persistedTask.phase,
+      }));
+
+      if (!shouldReplayTask(persistedTask.status)) {
+        setIsStreaming(false);
+        updateCurrentTaskId(null);
+        return;
+      }
+
+      setIsStreaming(true);
+
+      try {
+        const recovery = await syncTaskSnapshot(
+          persistedTask.taskId,
+          latestAssistantId || persistedTask.assistantMessageId
+        );
+        if (sessionLoadVersionRef.current !== loadVersion) {
+          return;
+        }
+
+        if (!recovery) {
+          setIsStreaming(false);
+          return;
+        }
+
+        const { snapshot, snapshotState, targetAssistantId } = recovery;
+        if (isTerminalState(snapshotState)) {
+          setIsStreaming(false);
+          if (shouldClearPersistedTask(snapshot.status)) {
+            clearPersistedTask(sessionId);
+          }
+          updateCurrentTaskId(null);
+          closeTaskStream();
+          return;
+        }
+
+        setIsStreaming(true);
+        subscribeToTask(
+          persistedTask.taskId,
+          targetAssistantId,
+          snapshot.lastEventId || persistedTask.lastEventId || undefined
+        );
+      } catch (err: any) {
+        if (sessionLoadVersionRef.current !== loadVersion) {
+          return;
+        }
+
+        setGenState(mapLifecycleState({
+          status: persistedTask.status,
+          phase: persistedTask.phase,
+        }));
+        setIsStreaming(false);
+        updateCurrentTaskId(null);
+        closeTaskStream();
+        toast.error(err?.message || '任务恢复失败');
+      }
     } catch {
+      if (sessionLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+
+      setMessages([]);
+      setPatterns([]);
       toast.error('加载历史记录失败');
       setGenState('idle');
+      setIsStreaming(false);
     } finally {
-      setIsLoadingHistory(false);
+      if (sessionLoadVersionRef.current === loadVersion) {
+        setIsLoadingHistory(false);
+      }
     }
   };
 
   const handleNewSession = () => {
-    // 清理 SSE 连接和任务状态
-    sseRef.current?.close();
-    setCurrentTaskId(null);
-    setCurrentSessionId(null);
-    setIsStreaming(false);
-    setLastEventId(null);
+    sessionLoadVersionRef.current += 1;
+    clearTaskState();
+    updateCurrentSessionId(null);
 
-    if (messages.length > 0 && activeSession === 'new') {
-      const title = (messages[0]?.content.slice(0, 18) ?? '新创作') + (messages[0]?.content.length > 18 ? '…' : '');
-      const newId = `s_${Date.now()}`;
-      setSessions(prev => [{
-        id: newId, title, category: selectedCategory,
-        time: new Date().toLocaleString('zh', {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit',
-        }).replace(/\//g, '-'),
-        group: 'today',
-      }, ...prev]);
-      SESSION_CONVERSATIONS[newId] = { messages: [...messages], patterns: [...patterns], savedIds: [] };
-    }
     setNewSessionAnim(true);
     setTimeout(() => setNewSessionAnim(false), 600);
     setActiveSession('new');
-    setMessages([]); setPatterns([]); setGenState('idle'); setInputValue('');
+    setIsLoadingHistory(false);
+    setMessages([]);
+    setPatterns([]);
+    setZoomPattern(null);
+    setGenState('idle');
+    setInputValue('');
     setTimeout(() => inputRef.current?.focus(), 100);
     toast.success(t('新创作空间已就绪', 'New session ready'), { duration: 1500 });
   };
 
-  const handleSend = async () => {
-    if (!inputValue.trim() || isStreaming) return;
+  // 普通发送与“再次生图”都走同一条提交流程，确保任务状态、会话刷新和 SSE 订阅完全一致。
+  const submitPrompt = async (rawPrompt: string) => {
+    const promptText = rawPrompt.trim();
+    if (!promptText || isStreaming) return;
 
+    sessionLoadVersionRef.current += 1;
     const clientMessageId = `local_${Date.now()}`;
-
     const userMsg: ConvMessage = {
       id: clientMessageId,
       role: 'user',
-      content: inputValue,
+      content: promptText,
       category: selectedCategory,
       timestamp: new Date().toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages(prev => [...prev, userMsg]);
-    setInputValue('');
+    setInputValue(prev => (prev.trim() === promptText ? '' : prev));
 
-    // 添加空的 assistant 消息占位（使用 system role 保持 UI 兼容）
     const assistantId = `assistant_${Date.now()}`;
     setMessages(prev => [...prev, {
       id: assistantId,
@@ -506,55 +1588,121 @@ export function ZhiHuiPage() {
     }]);
 
     setIsStreaming(true);
-    setPatterns([]); // 清空之前的方案
+    setPatterns([]);
+    updateLastEventId(null);
+    setAssistantMsgId(assistantId);
+    resetRuntime();
 
     try {
-      // 将分类 id 转为 imageStyle 格式（如 yunjin -> yun_jin）
-      const selectedCat = CATEGORIES.find(c => c.name === selectedCategory);
-      const imageStyle = selectedCat?.enabled ? selectedCat.id.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase() : undefined;
+      const imageStyle = DEFAULT_CATEGORY.id.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
 
       const res = await chatService.submitMessage({
         sessionId: currentSessionId || undefined,
         clientMessageId,
-        text: inputValue,
+        text: promptText,
         imageStyle,
       });
 
       const { sessionId, taskId } = res.data;
-      setCurrentSessionId(sessionId);
-      setCurrentTaskId(taskId);
+      updateCurrentSessionId(sessionId);
+      setActiveSession(sessionId);
+      updateCurrentTaskId(taskId);
       setAssistantMsgId(assistantId);
+      patchRuntime({
+        status: res.data.status,
+        phase: res.data.phase,
+        queuePosition: res.data.queuePosition ?? null,
+        estimatedWaitMs: res.data.estimatedWaitMs ?? null,
+      });
+      upsertPersistedTask(sessionId, {
+        taskId,
+        assistantMessageId: assistantId,
+        lastEventId: null,
+        status: res.data.status,
+        phase: res.data.phase,
+        queuePosition: res.data.queuePosition ?? null,
+        estimatedWaitMs: res.data.estimatedWaitMs ?? null,
+        requestId: null,
+        patterns: [],
+      });
+      setGenState(mapLifecycleState({ status: res.data.status, phase: res.data.phase }));
 
-      // 开始 SSE 订阅
+      void refreshSessions();
       subscribeToTask(taskId, assistantId);
-
     } catch (err: any) {
       setIsStreaming(false);
       setGenState('idle');
+      resetRuntime();
       toast.error(err.message || '提交失败');
       setMessages(prev => prev.filter(m => m.id !== assistantId));
     }
   };
 
-  const handleRegen = (pattern: GeneratedPattern) => {
-    toast.info(`正在重新生成「${pattern.title}」相近款...`);
-    setTimeout(() => toast.success('相近款已生成'), 1800);
+  const handleSend = async () => {
+    await submitPrompt(inputValue);
+  };
+
+  const handleRegen = async (pattern: GeneratedPattern) => {
+    if (pattern.status === 'pending') {
+      return;
+    }
+    await submitPrompt(buildRegeneratePrompt(pattern));
   };
 
   // 取消正在进行的任务
   const handleCancel = async () => {
     if (!currentTaskId) return;
-    sseRef.current?.close();
     try {
-      await chatService.cancelTask(currentTaskId);
+      const res = await chatService.cancelTask(currentTaskId);
+      patchRuntime({
+        status: res.data.status,
+        phase: res.data.phase ?? runtimeRef.current.phase,
+      });
+      upsertPersistedTask(currentSessionIdRef.current, {
+        taskId: currentTaskId,
+        assistantMessageId: assistantMsgIdRef.current,
+        lastEventId: lastEventIdRef.current,
+        status: res.data.status,
+        phase: res.data.phase ?? runtimeRef.current.phase,
+        queuePosition: runtimeRef.current.queuePosition,
+        estimatedWaitMs: runtimeRef.current.estimatedWaitMs,
+        requestId: runtimeRef.current.requestId,
+        patterns: patternsRef.current,
+      });
+      setGenState(mapLifecycleState({ status: res.data.status, phase: res.data.phase }));
+      if (res.data.status !== 'CANCEL_REQUESTED') {
+        setIsStreaming(false);
+        updateCurrentTaskId(null);
+        closeTaskStream();
+      }
     } catch (err: any) {
       toast.error(err.message || '取消失败');
     }
-    setIsStreaming(false);
-    setGenState('idle');
   };
 
-  const isGenerating = genState !== 'idle' && genState !== 'done';
+  const isGenerating = genState !== 'idle' && !isTerminalState(genState);
+  const showTerminalStatus = genState !== 'idle' && isTerminalState(genState);
+  const taskStatusText = genState !== 'idle' ? TASK_STAGE_COPY[genState] : '';
+  const progressState = (genState === 'cancelRequested'
+    ? mapLifecycleState({ phase: runtime.phase })
+    : ACTIVE_TASK_STEPS.includes(genState as (typeof ACTIVE_TASK_STEPS)[number])
+      ? genState
+      : mapLifecycleState({
+          phase: runtime.phase,
+          status: runtime.status === 'CANCEL_REQUESTED' ? null : runtime.status,
+        })) as (typeof ACTIVE_TASK_STEPS)[number];
+  const activeTaskIndex = Math.max(ACTIVE_TASK_STEPS.indexOf(progressState), 0);
+  const runtimeDetailLines = [
+    runtime.status ? `任务状态：${formatTaskStatus(runtime.status)}` : null,
+    runtime.phase ? `当前阶段：${formatTaskPhase(runtime.phase)}` : null,
+    runtime.queuePosition !== null || runtime.estimatedWaitMs !== null
+      ? `队列信息：${runtime.queuePosition != null ? `前方 ${runtime.queuePosition} 个` : '已出队'}${runtime.estimatedWaitMs != null ? ` · 预计 ${formatEstimatedWait(runtime.estimatedWaitMs)}` : ''}`
+      : null,
+    runtime.lastEventType ? `最新事件：${formatTaskEvent(runtime.lastEventType)}` : null,
+    runtime.connectionState && runtime.connectionState !== 'connected'
+      ? `连接状态：${formatConnectionState(runtime.connectionState, runtime.connectionMessage)}`
+      : null,
+  ].filter((line): line is string => Boolean(line));
 
   const sessionGroups = [
     { key: 'today' as const, label: '今日', items: sessions.filter(s => s.group === 'today') },
@@ -597,7 +1745,10 @@ export function ZhiHuiPage() {
                 <span className="text-xs text-[#C4912A]" style={{ fontWeight: 500 }}>当前创作</span>
               </div>
               {messages.length > 0 && (
-                <p className="text-[10px] text-[#9B9590] mt-0.5 truncate">{messages[0]?.content.slice(0, 22)}…</p>
+                <p className="text-[10px] text-[#9B9590] mt-0.5 truncate">
+                  {messages[0]?.content.slice(0, 22)}
+                  {messages[0]?.content && messages[0].content.length > 22 ? '…' : ''}
+                </p>
               )}
             </div>
           )}
@@ -635,6 +1786,11 @@ export function ZhiHuiPage() {
               })}
             </div>
           ))}
+          {!isLoadingSessions && sessions.length === 0 && (
+            <div className="px-3 py-6 text-[11px] text-[#9B9590] leading-relaxed">
+              暂无历史会话，发送第一条创作需求后会自动出现在这里。
+            </div>
+          )}
         </div>
 
         {/* ③ Sidebar bottom: removed Pro plan section ── */}
@@ -676,18 +1832,22 @@ export function ZhiHuiPage() {
               </div>
               <h2 className="text-[#1A3D4A] mb-2">描述你的创意方向</h2>
               <p className="text-sm text-[#9B9590] max-w-sm leading-relaxed mb-8">
-                AI 将基于云锦工艺规则生成 4 个纹样方向，点击图片放大欣赏，满意的方向可收录至我的纹库
+                AI 将基于云锦工艺规则生成一组纹样方向，并在生成过程中实时回传任务状态与图片结果。
               </p>
               <div className="w-full max-w-lg space-y-2">
-                {SAMPLE_PROMPTS.map((p, i) => (
-                  <motion.button key={i}
-                    initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.08 }}
-                    onClick={() => setInputValue(p)}
+                {SAMPLE_PROMPTS.map((prompt, index) => (
+                  <motion.button
+                    key={prompt}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.08 }}
+                    onClick={() => setInputValue(prompt)}
                     className="w-full text-left px-4 py-3 rounded-2xl text-sm"
                     style={{ background: 'white', border: '1px solid rgba(26,61,74,0.07)', color: '#1A3D4A' }}
-                    whileHover={{ borderColor: 'rgba(196,145,42,0.35)', y: -1 }}>
-                    <span className="mr-2 text-[#C4912A]">→</span>{p}
+                    whileHover={{ borderColor: 'rgba(196,145,42,0.35)', y: -1 }}
+                  >
+                    <span className="mr-2 text-[#C4912A]">→</span>
+                    {prompt}
                   </motion.button>
                 ))}
               </div>
@@ -721,7 +1881,7 @@ export function ZhiHuiPage() {
             </motion.div>
           ))}
 
-          {/* Generation progress */}
+          {/* Task status */}
           <AnimatePresence>
             {isGenerating && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
@@ -734,24 +1894,58 @@ export function ZhiHuiPage() {
                   style={{ background: 'white', border: '1px solid rgba(196,145,42,0.12)' }}>
                   <div className="flex items-center gap-2 text-[#1A3D4A]">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C4912A]" />
-                    {GEN_STEPS[genState]}
+                    {taskStatusText}
                   </div>
                   <div className="mt-2 space-y-1">
-                    {(['analyzing', 'matching', 'generating'] as GenState[]).map((step, i) => {
-                      const arr: GenState[] = ['analyzing', 'matching', 'generating'];
-                      const ci = arr.indexOf(genState), si = arr.indexOf(step);
+                    {ACTIVE_TASK_STEPS.map((step, i) => {
+                      const isPast = i < activeTaskIndex;
+                      const isCurrent = i === activeTaskIndex;
                       return (
                         <div key={step} className="flex items-center gap-2 text-xs">
                           <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                            si < ci ? 'bg-[#C4912A]' : si === ci ? 'bg-[#C4912A] animate-pulse' : 'bg-[rgba(26,61,74,0.12)]'
+                            isPast ? 'bg-[#C4912A]' : isCurrent ? 'bg-[#C4912A] animate-pulse' : 'bg-[rgba(26,61,74,0.12)]'
                           }`} />
-                          <span className={si <= ci ? 'text-[#1A3D4A]' : 'text-[#9B9590]'}>
-                            {['分析需求语义', '匹配授权纹样', '生成纹样方案'][i]}
+                          <span className={isPast || isCurrent ? 'text-[#1A3D4A]' : 'text-[#9B9590]'}>
+                            {TASK_STAGE_LABELS[step]}
                           </span>
                         </div>
                       );
                     })}
                   </div>
+                  {runtimeDetailLines.length > 0 && (
+                    <div className="mt-3 space-y-1.5 border-t border-[rgba(26,61,74,0.08)] pt-3">
+                      {runtimeDetailLines.map(line => (
+                        <div key={line} className="text-[11px] text-[#6B6558] leading-relaxed">
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+            {showTerminalStatus && (
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                className="mb-4 flex justify-start">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mr-2.5 mt-0.5"
+                  style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
+                  <Sparkles className="w-3.5 h-3.5 text-[#C4912A]" />
+                </div>
+                <div className="px-4 py-3 rounded-2xl rounded-tl-sm text-sm"
+                  style={{ background: 'white', border: '1px solid rgba(196,145,42,0.12)' }}>
+                  <div className="flex items-center gap-2 text-[#1A3D4A]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#C4912A]" />
+                    {taskStatusText}
+                  </div>
+                  {runtimeDetailLines.length > 0 && (
+                    <div className="mt-3 space-y-1.5 border-t border-[rgba(26,61,74,0.08)] pt-3">
+                      {runtimeDetailLines.map(line => (
+                        <div key={line} className="text-[11px] text-[#6B6558] leading-relaxed">
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -761,11 +1955,28 @@ export function ZhiHuiPage() {
           <AnimatePresence>
             {patterns.length > 0 && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-                <p className="text-xs text-[#9B9590] mb-4 px-0.5">4 个创作方向 · 点击图片查看大图</p>
+                <p className="text-xs text-[#9B9590] mb-4 px-0.5">
+                  {patterns.length} 个创作方向 · 点击图片查看大图
+                </p>
 
                 <div className="grid grid-cols-2 gap-4">
                   {patterns.map((pattern, i) => {
-                    const saved = isSavedGlobally(pattern.id);
+                    const isReady = pattern.status === 'ready';
+                    const isPending = pattern.status === 'pending';
+                    const isFailed = pattern.status === 'failed';
+                    const saved = isReady && isSavedGlobally(pattern.id);
+                    const cardBorder = isReady
+                      ? (saved ? '2px solid rgba(13,148,136,0.45)' : '1px solid rgba(196,145,42,0.12)')
+                      : isPending
+                        ? '1px solid rgba(196,145,42,0.14)'
+                        : '1px solid rgba(180,60,60,0.18)';
+                    const cardShadow = isReady
+                      ? (saved
+                          ? '0 0 0 3px rgba(13,148,136,0.07), 0 8px 32px rgba(26,61,74,0.1)'
+                          : '0 4px 24px rgba(26,61,74,0.08)')
+                      : isPending
+                        ? '0 4px 20px rgba(26,61,74,0.06)'
+                        : '0 4px 20px rgba(180,60,60,0.08)';
                     return (
                       <motion.div
                         key={pattern.id}
@@ -775,113 +1986,162 @@ export function ZhiHuiPage() {
                         className="group rounded-3xl overflow-hidden"
                         style={{
                           background: 'white',
-                          border: saved
-                            ? '2px solid rgba(13,148,136,0.45)'
-                            : '1px solid rgba(196,145,42,0.12)',
-                          boxShadow: saved
-                            ? '0 0 0 3px rgba(13,148,136,0.07), 0 8px 32px rgba(26,61,74,0.1)'
-                            : '0 4px 24px rgba(26,61,74,0.08)',
+                          border: cardBorder,
+                          boxShadow: cardShadow,
                         }}
                       >
-                        {/* ① Image area: only zoom indicator, no bookmark on image */}
-                        <div
-                          className="relative overflow-hidden cursor-pointer"
-                          style={{ paddingBottom: '76%' }}
-                          onClick={() => setZoomPattern(pattern)}
-                        >
-                          <img
-                            src={pattern.imageUrl}
-                            alt={pattern.title}
-                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                          />
-
-                          {/* Subtle bottom gradient for title readability */}
-                          <div className="absolute inset-0"
-                            style={{ background: 'linear-gradient(to top, rgba(11,20,30,0.72) 0%, rgba(11,20,30,0.05) 42%, transparent 100%)' }} />
-
-                          {/* ① Zoom indicator: bottom-right corner (non-intrusive, conventional) */}
-                          <div
-                            className="absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
-                            style={{
-                              background: 'rgba(255,255,255,0.18)',
-                              backdropFilter: 'blur(8px)',
-                              border: '1px solid rgba(255,255,255,0.25)',
-                            }}
-                          >
-                            <ZoomIn className="w-3.5 h-3.5 text-white" />
-                          </div>
-
-                          {/* Title + tags on image */}
-                          <div className="absolute bottom-0 left-0 right-0 px-4 py-3.5">
-                            <p className="text-white text-sm mb-2" style={{ fontWeight: 600, textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
-                              {pattern.title}
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {pattern.tags.map(tag => (
-                                <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full"
-                                  style={{ background: 'rgba(196,145,42,0.35)', color: '#F5D88A', backdropFilter: 'blur(4px)' }}>{tag}</span>
-                              ))}
+                        <div className="relative overflow-hidden" style={{ paddingBottom: '76%' }}>
+                          {isReady ? (
+                            <>
+                              <img
+                                src={pattern.imageUrl}
+                                alt={pattern.title}
+                                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 cursor-pointer"
+                                onClick={() => setZoomPattern(pattern)}
+                              />
+                              <div className="absolute inset-0"
+                                style={{ background: 'linear-gradient(to top, rgba(11,20,30,0.72) 0%, rgba(11,20,30,0.05) 42%, transparent 100%)' }} />
+                              <div
+                                className="absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                                style={{
+                                  background: 'rgba(255,255,255,0.18)',
+                                  backdropFilter: 'blur(8px)',
+                                  border: '1px solid rgba(255,255,255,0.25)',
+                                }}
+                              >
+                                <ZoomIn className="w-3.5 h-3.5 text-white" />
+                              </div>
+                              <div className="absolute bottom-0 left-0 right-0 px-4 py-3.5">
+                                <p className="text-white text-sm mb-2" style={{ fontWeight: 600, textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
+                                  {pattern.title}
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {pattern.tags.map(tag => (
+                                    <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full"
+                                      style={{ background: 'rgba(196,145,42,0.35)', color: '#F5D88A', backdropFilter: 'blur(4px)' }}>{tag}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div
+                              className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center"
+                              style={{
+                                background: isPending
+                                  ? 'linear-gradient(135deg, rgba(245,240,232,0.9), rgba(255,255,255,0.95))'
+                                  : 'linear-gradient(135deg, rgba(255,244,244,0.95), rgba(255,255,255,0.98))',
+                              }}
+                            >
+                              <div
+                                className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+                                style={{
+                                  background: isPending ? 'rgba(196,145,42,0.12)' : 'rgba(180,60,60,0.1)',
+                                  color: isPending ? '#C4912A' : '#B23A3A',
+                                }}
+                              >
+                                {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <X className="w-5 h-5" />}
+                              </div>
+                              <p className="text-sm mb-1" style={{ fontWeight: 600, color: isPending ? '#1A3D4A' : '#8B2020' }}>
+                                {PATTERN_STATUS_LABELS[pattern.status]}
+                              </p>
+                              <p className="text-xs leading-relaxed" style={{ color: '#6B6558' }}>
+                                {pattern.title}
+                              </p>
+                              <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#9B9590' }}>
+                                {pattern.desc}
+                              </p>
+                              {isFailed && pattern.errorMessage && (
+                                <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#B23A3A' }}>
+                                  {pattern.errorMessage}
+                                </p>
+                              )}
                             </div>
-                          </div>
+                          )}
                         </div>
 
-                        {/* ④ Footer: warm parchment, clear readable, luxurious gold accents */}
                         <div className="flex items-center gap-2 px-4 py-3"
                           style={{ background: 'linear-gradient(to right, #FDFAF5, #FBF7EE)', borderTop: '1px solid rgba(196,145,42,0.1)' }}>
-                          {/* Style + Scene badges */}
                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
                             <span className="text-[10px] px-2 py-1 rounded-full flex-shrink-0"
-                              style={{ background: 'rgba(196,145,42,0.1)', color: '#B8821E' }}>
+                              style={{
+                                background: isReady ? 'rgba(196,145,42,0.1)' : isPending ? 'rgba(196,145,42,0.08)' : 'rgba(180,60,60,0.08)',
+                                color: isReady ? '#B8821E' : isPending ? '#C4912A' : '#B23A3A',
+                              }}>
                               {pattern.style}
                             </span>
                             <span className="text-[10px] text-[#9B9590] truncate">{pattern.scene}</span>
                           </div>
-                          {/* Save to Library button */}
-                          <button
-                            onClick={e => { e.stopPropagation(); handleToggleSave(pattern); }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
-                            style={saved
-                              ? { background: 'rgba(13,148,136,0.1)', color: '#0d9488', border: '1px solid rgba(13,148,136,0.25)' }
-                              : { background: 'rgba(196,145,42,0.08)', color: '#B8821E', border: '1px solid rgba(196,145,42,0.22)' }
-                            }
-                            onMouseEnter={e => {
-                              if (!saved) {
-                                (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.16)';
-                                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.4)';
-                              }
-                            }}
-                            onMouseLeave={e => {
-                              if (!saved) {
-                                (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.08)';
-                                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.22)';
-                              }
-                            }}
-                          >
-                            {saved
-                              ? <><BookmarkCheck className="w-3 h-3" /> 已收录</>
-                              : <><Bookmark className="w-3 h-3" /> 收录至我的纹库</>
-                            }
-                          </button>
-                          {/* Regen button */}
-                          <button
-                            onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
-                            style={{
-                              background: 'rgba(26,61,74,0.06)',
-                              color: '#6B6558',
-                              border: '1px solid rgba(26,61,74,0.1)',
-                            }}
-                            onMouseEnter={e => {
-                              (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.1)';
-                              (e.currentTarget as HTMLElement).style.color = '#1A3D4A';
-                            }}
-                            onMouseLeave={e => {
-                              (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.06)';
-                              (e.currentTarget as HTMLElement).style.color = '#6B6558';
-                            }}
-                          >
-                            <RotateCcw className="w-3 h-3" /> 再次生图
-                          </button>
+                          {isReady ? (
+                            <>
+                              <button
+                                onClick={e => { e.stopPropagation(); handleToggleSave(pattern); }}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
+                                style={saved
+                                  ? { background: 'rgba(13,148,136,0.1)', color: '#0d9488', border: '1px solid rgba(13,148,136,0.25)' }
+                                  : { background: 'rgba(196,145,42,0.08)', color: '#B8821E', border: '1px solid rgba(196,145,42,0.22)' }
+                                }
+                                onMouseEnter={e => {
+                                  if (!saved) {
+                                    (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.16)';
+                                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.4)';
+                                  }
+                                }}
+                                onMouseLeave={e => {
+                                  if (!saved) {
+                                    (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.08)';
+                                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.22)';
+                                  }
+                                }}
+                              >
+                                {saved
+                                  ? <><BookmarkCheck className="w-3 h-3" /> 已收录</>
+                                  : <><Bookmark className="w-3 h-3" /> 收录至我的纹库</>
+                                }
+                              </button>
+                              <button
+                                onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
+                                style={{
+                                  background: 'rgba(26,61,74,0.06)',
+                                  color: '#6B6558',
+                                  border: '1px solid rgba(26,61,74,0.1)',
+                                }}
+                                onMouseEnter={e => {
+                                  (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.1)';
+                                  (e.currentTarget as HTMLElement).style.color = '#1A3D4A';
+                                }}
+                                onMouseLeave={e => {
+                                  (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.06)';
+                                  (e.currentTarget as HTMLElement).style.color = '#6B6558';
+                                }}
+                              >
+                                <RotateCcw className="w-3 h-3" /> 再次生图
+                              </button>
+                            </>
+                          ) : isFailed ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
+                              style={{
+                                background: 'rgba(180,60,60,0.08)',
+                                color: '#8B2020',
+                                border: '1px solid rgba(180,60,60,0.18)',
+                              }}
+                            >
+                              <RotateCcw className="w-3 h-3" /> 再次生图
+                            </button>
+                          ) : (
+                            <span
+                              className="text-[10px] px-2.5 py-1.5 rounded-full flex-shrink-0"
+                              style={{
+                                background: 'rgba(196,145,42,0.08)',
+                                color: '#C4912A',
+                                border: '1px solid rgba(196,145,42,0.18)',
+                              }}
+                            >
+                              等待回调
+                            </span>
+                          )}
                         </div>
                       </motion.div>
                     );
@@ -906,76 +2166,11 @@ export function ZhiHuiPage() {
           style={{ borderTop: '1px solid rgba(26,61,74,0.07)', background: 'rgba(245,240,232,0.9)' }}>
           <div className="flex items-end gap-2 p-2 rounded-2xl"
             style={{ background: 'white', border: '1px solid rgba(26,61,74,0.1)', boxShadow: '0 1px 12px rgba(26,61,74,0.06)' }}>
-
-            {/* Upload menu */}
-            <div className="relative flex-shrink-0">
-              <button onClick={() => { setShowUploadMenu(!showUploadMenu); setShowCategoryMenu(false); }}
-                className="w-9 h-9 rounded-xl flex items-center justify-center transition-all"
-                style={{ background: showUploadMenu ? 'rgba(196,145,42,0.1)' : 'rgba(26,61,74,0.05)', color: '#1A3D4A' }}>
-                <Plus className="w-4 h-4" />
-              </button>
-              <AnimatePresence>
-                {showUploadMenu && (
-                  <motion.div initial={{ opacity: 0, y: 6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.95 }}
-                    className="absolute bottom-full mb-2 left-0 w-44 rounded-2xl shadow-xl overflow-hidden z-20"
-                    style={{ background: 'white', border: '1px solid rgba(26,61,74,0.08)', boxShadow: '0 8px 32px rgba(13,37,53,0.12)' }}>
-                    {UPLOAD_OPTIONS.map((opt, idx) => (
-                      <button key={idx}
-                        onClick={() => { setShowUploadMenu(false); toast.info(t(opt.label, opt.labelEn) + ' 功能即将开放'); }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#F5F0E8] transition-colors text-xs text-[#1A3D4A] text-left">
-                        <span className="text-[#C4912A]">{opt.icon}</span>
-                        {t(opt.label, opt.labelEn)}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Category picker */}
-            <div className="relative flex-shrink-0">
-              <button onClick={() => { setShowCategoryMenu(!showCategoryMenu); setShowUploadMenu(false); }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-all"
-                style={{ background: 'rgba(196,145,42,0.08)', color: '#C4912A' }}>
-                {selectedCategory} <ChevronDown className="w-3 h-3" />
-              </button>
-              <AnimatePresence>
-                {showCategoryMenu && (
-                  <motion.div initial={{ opacity: 0, y: 6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.95 }}
-                    className="absolute bottom-full mb-2 left-0 w-40 rounded-2xl shadow-xl overflow-hidden z-20"
-                    style={{ background: 'white', border: '1px solid rgba(26,61,74,0.08)', boxShadow: '0 8px 32px rgba(13,37,53,0.12)' }}>
-                    <div className="p-1.5">
-                      <p className="text-[10px] px-2 py-1" style={{ color: 'rgba(26,61,74,0.3)', letterSpacing: '0.08em' }}>非遗品类</p>
-                      {CATEGORIES.map(cat => (
-                        <button key={cat.id}
-                          onClick={() => {
-                            if (cat.enabled) { setSelectedCategory(cat.name); setShowCategoryMenu(false); }
-                            else { toast.info(`「${cat.name}」即将开放`); }
-                          }}
-                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors ${
-                            cat.enabled
-                              ? selectedCategory === cat.name
-                                ? 'bg-[#F0E6D3] text-[#C4912A] cursor-pointer'
-                                : 'hover:bg-[#F5F0E8] text-[#1A3D4A] cursor-pointer'
-                              : 'cursor-default'
-                          }`}
-                          style={{ color: !cat.enabled ? 'rgba(26,61,74,0.28)' : undefined }}>
-                          <span>{cat.name}</span>
-                          {!cat.enabled
-                            ? <span className="text-[9px] px-1.5 py-0.5 rounded-full"
-                                style={{ background: 'rgba(26,61,74,0.05)', color: 'rgba(26,61,74,0.28)' }}>即将开放</span>
-                            : selectedCategory === cat.name
-                              ? <span className="w-1.5 h-1.5 rounded-full bg-[#C4912A]" />
-                              : null
-                          }
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            <div
+              className="flex items-center px-3 py-2 rounded-xl text-xs flex-shrink-0"
+              style={{ background: 'rgba(196,145,42,0.08)', color: '#C4912A' }}
+            >
+              {selectedCategory}
             </div>
 
             {/* Textarea */}
@@ -1029,11 +2224,6 @@ export function ZhiHuiPage() {
           />
         )}
       </AnimatePresence>
-
-      {/* Click-outside overlay for menus */}
-      {(showCategoryMenu || showUploadMenu) && (
-        <div className="fixed inset-0 z-10" onClick={() => { setShowCategoryMenu(false); setShowUploadMenu(false); }} />
-      )}
     </div>
   );
 }

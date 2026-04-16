@@ -36,6 +36,8 @@ export interface SendMessageResponse {
 export interface ArtifactSummary {
   status: string;
   requestId: string;
+  recordId?: string;
+  recordIds?: string[];
   objectKey: string;
   objectKeys: string[];
   promptSummary: string;
@@ -71,11 +73,24 @@ export type SSEEventType =
   | 'message.completed'
   | 'artifact.pending'
   | 'artifact.ready'
+  | 'artifact.failed'
+  | 'artifact.metadata.completed'
   | 'task.completed'
   | 'task.failed'
   | 'task.rejected'
   | 'task.cancelled'
   | 'heartbeat';
+
+export interface SSEImageInfo {
+  recordId?: string;
+  objectKey?: string;
+  url?: string;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  width?: number;
+  height?: number;
+}
 
 export interface SSEMessage {
   type: SSEEventType;
@@ -83,19 +98,29 @@ export interface SSEMessage {
   sessionId: string;
   occurredAt: string;
   seq: number;
+  id?: string;
+  streamId?: string;
+  requestId?: string;
+  serviceType?: string;
+  remoteTaskId?: string;
   // task.phase
   phase?: string;
   // message.delta / message.completed
   messageId?: string;
   delta?: string;
   finishReason?: string;
-  // artifact.ready
+  message?: string;
+  // artifact.pending / artifact.ready / artifact.failed
+  recordId?: string;
+  recordIds?: string[];
   objectKey?: string;
   objectKeys?: string[];
   promptSummary?: string;
+  images?: Array<string | SSEImageInfo>;
   width?: number;
   height?: number;
   nsfwDetected?: boolean;
+  totalCount?: number;
   // task.failed
   stage?: string;
   code?: string;
@@ -108,6 +133,30 @@ export interface SSEMessage {
   // queue.updated
   position?: number;
   estimatedWaitMs?: number;
+}
+
+export type SSEConnectionState =
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'closed'
+  | 'error';
+
+export interface SSEConnectionEvent {
+  state: SSEConnectionState;
+  attempt: number;
+  lastEventId?: string;
+  retryInMs?: number;
+  status?: number;
+  message?: string;
+}
+
+export interface SubscribeEventsOptions {
+  lastEventId?: string;
+  onStatus?: (event: SSEConnectionEvent) => void;
+  onError?: (event: SSEConnectionEvent) => void;
+  reconnectDelayMs?: number;
+  maxReconnectDelayMs?: number;
 }
 
 // 会话
@@ -123,7 +172,33 @@ export interface ConversationMessage {
   messageId: string;
   role: string;
   text: string;
+  taskId?: string;
+  assistantMessageId?: string;
+  lastEventId?: string;
+  lastEventSeq?: number;
+  status?: string;
+  phase?: string;
+  queuePosition?: number | null;
+  estimatedWaitMs?: number | null;
+  requestId?: string;
+  recordId?: string;
+  recordIds?: string[];
+  artifactStatus?: string;
+  artifact?: {
+    status?: string;
+    requestId?: string;
+    recordId?: string;
+    recordIds?: string[];
+    objectKey?: string;
+    objectKeys?: string[];
+    promptSummary?: string;
+    remoteStatus?: string;
+    width?: number;
+    height?: number;
+    nsfwDetected?: boolean;
+  };
   images: {
+    recordId?: string;
     objectKey: string;
     title: string;
     description: string;
@@ -238,156 +313,321 @@ export const chatService = {
    * @param taskId 任务 ID
    * @param onMessage 每条 SSE 消息的回调（heartbeat 事件除外）
    * @param options.lastEventId 从上次断开的事件 ID 继续（用于断线重连）
+   * @param options.onStatus 连接状态变化回调
+   * @param options.onError 连接出现不可恢复错误时的回调
    * @returns close 函数，调用后关闭 SSE 连接
    */
   subscribeEvents: (
     taskId: string,
     onMessage: (msg: SSEMessage) => void,
-    options?: { lastEventId?: string }
+    options?: SubscribeEventsOptions
   ) => {
     const token = localStorage.getItem('accessToken') ?? '';
-    const params = new URLSearchParams({
-      lastEventId: options?.lastEventId ?? '',
-    });
+    const initialLastEventId = options?.lastEventId?.trim() || '';
+    const baseReconnectDelayMs = options?.reconnectDelayMs ?? 1500;
+    const maxReconnectDelayMs = options?.maxReconnectDelayMs ?? 10000;
 
     let closed = false;
+    let terminal = false;
+    let attempt = 0;
+    let lastEventId = initialLastEventId;
+    let serverSuggestedRetryMs: number | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let activeController: AbortController | null = null;
+    let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
-    const cleanup = () => {
-      closed = true;
+    const isRetryableStatus = (status: number) =>
+      status === 408 ||
+      status === 425 ||
+      status === 429 ||
+      status === 500 ||
+      status === 502 ||
+      status === 503 ||
+      status === 504;
+
+    const emitStatus = (event: SSEConnectionEvent) => {
+      options?.onStatus?.(event);
     };
 
-    fetch(`${API_BASE}/client/ai/tasks/${taskId}/events?${params}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`SSE 连接失败: HTTP ${response.status}`);
-        }
-        if (!response.body) {
-          throw new Error('SSE response body 为空');
-        }
+    const emitError = (event: SSEConnectionEvent) => {
+      options?.onError?.(event);
+    };
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
+    const clearReconnectTimer = () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
 
-        // SSE 事件状态机：累积字段直到遇到空行（事件结束）
-        let currentEvent: { type?: string; data?: string; id?: string } = {};
-
-        const processLine = (rawLine: string) => {
-          const line = rawLine;
-
-          // 空行 → 事件结束，解析并回调
-          if (line === '') {
-            if (currentEvent.data !== undefined) {
-              try {
-                const msg: SSEMessage = JSON.parse(currentEvent.data);
-                // event 字段覆盖 msg 自带的 type
-                const finalMsg: SSEMessage = {
-                  ...msg,
-                  type: (currentEvent.type as SSEEventType) ?? msg.type,
-                };
-                if (finalMsg.type !== 'heartbeat') {
-                  onMessage(finalMsg);
-                }
-              } catch {
-                // JSON 解析失败，忽略该事件
-              }
-            }
-            currentEvent = {};
-            return;
-          }
-
-          // 注释行，忽略
-          if (line.startsWith(':')) return;
-
-          // 字段行: field-name[:value]
-          // value 前可能有空格（空格是 field-value 的一部分，跳过前导空格）
-          const colonIdx = line.indexOf(':');
-          if (colonIdx === -1) {
-            // 无 colon 的行：可能是多行 data 的续行（以空格开头）
-            // 按 SSE 规范，多行 data 续行的首字符是空格（` ` 或 `\t`）
-            const stripped = line.replace(/^[ \t]+/, '');
-            if (stripped && currentEvent.data !== undefined) {
-              // 这是 data 字段的续行，将内容追加到 currentEvent.data
-              // 当前行内容（去掉前导空格后）应拼到当前 data 末尾
-              // 但更简洁的做法：直接追加（空行已处理了 `\n`）
-              currentEvent.data += stripped;
-            }
-            return;
-          }
-
-          const field = line.slice(0, colonIdx).trim();
-          const value = line.slice(colonIdx + 1); // value 不做 trim，让续行的空格自然处理
-
-          switch (field) {
-            case 'event':
-              currentEvent.type = value.trim();
-              break;
-            case 'data':
-              // SSE 中多个 data: 行会按出现顺序拼接（用换行连接）
-              if (currentEvent.data !== undefined) {
-                currentEvent.data += '\n' + value;
-              } else {
-                currentEvent.data = value;
-              }
-              break;
-            case 'id':
-              currentEvent.id = value.trim();
-              break;
-            // 忽略其他字段
-          }
-        };
-
-        const read = () => {
-          reader
-            .read()
-            .then(({ done, value }) => {
-              if (done || closed) {
-                reader.cancel();
-                return;
-              }
-
-              buffer += decoder.decode(value, { stream: true });
-
-              // 按 '\n' 分行，处理每一行
-              const lines = buffer.split('\n');
-              // 最后一行可能是未完成的行（没有 '\n' 结尾），保留在 buffer
-              buffer = lines.pop() ?? '';
-
-              for (const line of lines) {
-                // 去掉行尾的 '\r'（兼容 Windows CRLF）
-                const cleanLine = line.endsWith('\r')
-                  ? line.slice(0, -1)
-                  : line;
-                processLine(cleanLine);
-              }
-
-              if (!closed) {
-                read();
-              }
-            })
-            .catch(() => {
-              // reader 被取消，忽略
-            });
-        };
-
-        read();
-      })
-      .catch((err) => {
-        if (!closed) {
-          onMessage({
-            type: 'task.failed',
-            taskId,
-            sessionId: '',
-            occurredAt: new Date().toISOString(),
-            seq: 0,
-            errorMessage: (err as Error).message || String(err),
-          });
-        }
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      terminal = true;
+      clearReconnectTimer();
+      activeController?.abort();
+      if (activeReader) {
+        void activeReader.cancel().catch(() => {});
+      }
+      emitStatus({
+        state: 'closed',
+        attempt,
+        lastEventId: lastEventId || undefined,
       });
+    };
+
+    const emitTaskFailed = (message: string, status?: number) => {
+      const failure: SSEMessage = {
+        type: 'task.failed',
+        taskId,
+        sessionId: '',
+        occurredAt: new Date().toISOString(),
+        seq: 0,
+        message,
+        errorMessage: message,
+        retriable: false,
+      };
+      onMessage(failure);
+      emitError({
+        state: 'error',
+        attempt,
+        lastEventId: lastEventId || undefined,
+        status,
+        message,
+      });
+    };
+
+    const scheduleReconnect = (message: string, status?: number) => {
+      if (closed || terminal) return;
+
+      const retryDelay =
+        serverSuggestedRetryMs ??
+        Math.min(baseReconnectDelayMs * 2 ** Math.max(attempt - 1, 0), maxReconnectDelayMs);
+
+      emitStatus({
+        state: attempt === 0 ? 'connecting' : 'reconnecting',
+        attempt: attempt + 1,
+        lastEventId: lastEventId || undefined,
+        retryInMs: retryDelay,
+        status,
+        message,
+      });
+
+      clearReconnectTimer();
+      reconnectTimer = setTimeout(() => {
+        if (!closed && !terminal) {
+          void connect();
+        }
+      }, retryDelay);
+    };
+
+    const finalizeTerminalEvent = (msg: SSEMessage) => {
+      terminal = true;
+      activeController?.abort();
+      if (activeReader) {
+        void activeReader.cancel().catch(() => {});
+      }
+      emitStatus({
+        state: 'closed',
+        attempt,
+        lastEventId: lastEventId || undefined,
+      });
+      onMessage(msg);
+    };
+
+    const parseEventPayload = (rawData: string, eventType: string | undefined, eventId: string | undefined) => {
+      try {
+        const parsed = JSON.parse(rawData) as SSEMessage & Record<string, unknown>;
+        // 后端断线续传严格依赖 SSE frame 的 id（Redis Stream ID），不能退回到业务字段 requestId。
+        const normalizedId = eventId || parsed.id || parsed.streamId;
+        if (normalizedId) {
+          lastEventId = String(normalizedId);
+        }
+
+        const finalMsg: SSEMessage = {
+          ...parsed,
+          type: (eventType as SSEEventType) ?? parsed.type,
+          id: parsed.id ?? (eventId ? String(eventId) : undefined),
+          streamId: parsed.streamId ?? (eventId ? String(eventId) : undefined),
+          requestId: parsed.requestId ? String(parsed.requestId) : undefined,
+          serviceType: parsed.serviceType ? String(parsed.serviceType) : undefined,
+          remoteTaskId: parsed.remoteTaskId ? String(parsed.remoteTaskId) : undefined,
+          message: parsed.message ? String(parsed.message) : undefined,
+        };
+
+        if (finalMsg.type === 'task.failed') {
+          const failureMessage = finalMsg.message ?? finalMsg.errorMessage ?? '任务失败';
+          finalMsg.message = failureMessage;
+          finalMsg.errorMessage = failureMessage;
+        }
+
+        if (finalMsg.type !== 'heartbeat') {
+          if (finalMsg.type === 'task.completed' || finalMsg.type === 'task.failed' || finalMsg.type === 'task.rejected' || finalMsg.type === 'task.cancelled') {
+            finalizeTerminalEvent(finalMsg);
+          } else {
+            onMessage(finalMsg);
+          }
+        }
+      } catch {
+        // JSON 解析失败，忽略该事件
+      }
+    };
+
+    const connect = async () => {
+      while (!closed && !terminal) {
+        const currentAttempt = attempt;
+        const currentLastEventId = lastEventId || initialLastEventId;
+        const query = new URLSearchParams();
+        if (currentLastEventId) {
+          query.set('lastEventId', currentLastEventId);
+        }
+
+        const requestUrl = `${API_BASE}/client/ai/tasks/${taskId}/events${query.toString() ? `?${query.toString()}` : ''}`;
+        activeController = new AbortController();
+
+        emitStatus({
+          state: currentAttempt === 0 ? 'connecting' : 'reconnecting',
+          attempt: currentAttempt + 1,
+          lastEventId: currentLastEventId || undefined,
+          retryInMs: currentAttempt === 0 ? undefined : serverSuggestedRetryMs ?? baseReconnectDelayMs,
+        });
+
+        try {
+          const response = await fetch(requestUrl, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              ...(currentLastEventId ? { 'Last-Event-ID': currentLastEventId } : {}),
+            },
+            signal: activeController.signal,
+          });
+
+          if (closed || terminal) return;
+
+          if (!response.ok) {
+            const message = `SSE 连接失败: HTTP ${response.status}`;
+            if (isRetryableStatus(response.status)) {
+              attempt += 1;
+              scheduleReconnect(message, response.status);
+              return;
+            }
+            emitTaskFailed(message, response.status);
+            return;
+          }
+
+          if (!response.body) {
+            attempt += 1;
+            scheduleReconnect('SSE response body 为空');
+            return;
+          }
+
+          emitStatus({
+            state: 'connected',
+            attempt: currentAttempt + 1,
+            lastEventId: currentLastEventId || undefined,
+          });
+
+          activeReader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let currentEvent: { type?: string; data?: string[]; id?: string; retry?: number } = {};
+
+          const processLine = (rawLine: string) => {
+            const line = rawLine;
+
+            if (line === '') {
+              if (currentEvent.data && currentEvent.data.length > 0) {
+                parseEventPayload(currentEvent.data.join('\n'), currentEvent.type, currentEvent.id);
+              }
+              currentEvent = {};
+              return;
+            }
+
+            if (line.startsWith(':')) return;
+
+            const colonIdx = line.indexOf(':');
+            if (colonIdx === -1) {
+              return;
+            }
+
+            const field = line.slice(0, colonIdx).trim();
+            const value = line.slice(colonIdx + 1);
+
+            switch (field) {
+              case 'event':
+                currentEvent.type = value.trim();
+                break;
+              case 'data':
+                if (currentEvent.data) {
+                  currentEvent.data.push(value);
+                } else {
+                  currentEvent.data = [value];
+                }
+                break;
+              case 'id':
+                currentEvent.id = value.trim();
+                if (currentEvent.id) {
+                  lastEventId = currentEvent.id;
+                }
+                break;
+              case 'retry': {
+                const parsedRetry = Number(value.trim());
+                if (Number.isFinite(parsedRetry) && parsedRetry >= 0) {
+                  currentEvent.retry = parsedRetry;
+                  serverSuggestedRetryMs = parsedRetry;
+                }
+                break;
+              }
+              default:
+                break;
+            }
+          };
+
+          while (!closed && !terminal) {
+            const { done, value } = await activeReader.read();
+
+            if (done) {
+              break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
+            for (const line of lines) {
+              const cleanLine = line.endsWith('\r') ? line.slice(0, -1) : line;
+              processLine(cleanLine);
+              if (closed || terminal) {
+                break;
+              }
+            }
+          }
+
+          if (closed || terminal) {
+            return;
+          }
+
+          attempt += 1;
+          scheduleReconnect('SSE 连接中断，正在重连');
+        } catch (err) {
+          if (closed || terminal) {
+            return;
+          }
+
+          if ((err as Error)?.name === 'AbortError') {
+            return;
+          }
+
+          const message = (err as Error)?.message || String(err);
+          attempt += 1;
+          scheduleReconnect(message);
+        } finally {
+          activeReader = null;
+        }
+      }
+    };
+
+    void connect();
 
     return { close: cleanup };
   },
