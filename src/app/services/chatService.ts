@@ -18,7 +18,7 @@ export interface SendMessageRequest {
   sessionId?: string;
   clientMessageId: string;
   text?: string;
-  objectKeys?: string[];
+  fileIds?: string[];
   imageStyle?: string;
 }
 
@@ -36,10 +36,21 @@ export interface SendMessageResponse {
 export interface ArtifactSummary {
   status: string;
   requestId: string;
-  recordId?: string;
-  recordIds?: string[];
-  objectKey: string;
-  objectKeys: string[];
+  fileId?: string;
+  fileIds?: string[];
+  records?: Array<{
+    recordId?: string;
+    recordStatus?: string;
+    status?: string;
+    fileId?: string;
+    title?: string;
+    description?: string;
+    tags?: string[];
+    width?: number;
+    height?: number;
+    failureCode?: string;
+    failureMessage?: string;
+  }>;
   promptSummary: string;
   remoteStatus: string;
   width: number;
@@ -83,8 +94,7 @@ export type SSEEventType =
 
 export interface SSEImageInfo {
   recordId?: string;
-  objectKey?: string;
-  url?: string;
+  fileId?: string;
   title?: string;
   description?: string;
   tags?: string[];
@@ -113,10 +123,11 @@ export interface SSEMessage {
   // artifact.pending / artifact.ready / artifact.failed
   recordId?: string;
   recordIds?: string[];
-  objectKey?: string;
-  objectKeys?: string[];
+  fileId?: string;
+  fileIds?: string[];
+  image?: SSEImageInfo;
   promptSummary?: string;
-  images?: Array<string | SSEImageInfo>;
+  images?: SSEImageInfo[];
   width?: number;
   height?: number;
   nsfwDetected?: boolean;
@@ -170,41 +181,17 @@ export interface SessionRecord {
 
 export interface ConversationMessage {
   messageId: string;
+  taskId?: string;
   role: string;
   text: string;
-  taskId?: string;
-  assistantMessageId?: string;
-  lastEventId?: string;
-  lastEventSeq?: number;
-  status?: string;
-  phase?: string;
-  queuePosition?: number | null;
-  estimatedWaitMs?: number | null;
-  requestId?: string;
-  recordId?: string;
-  recordIds?: string[];
-  artifactStatus?: string;
-  artifact?: {
-    status?: string;
-    requestId?: string;
+  images?: {
     recordId?: string;
-    recordIds?: string[];
-    objectKey?: string;
-    objectKeys?: string[];
-    promptSummary?: string;
-    remoteStatus?: string;
+    fileId?: string;
+    title?: string;
+    description?: string;
+    tags?: string[];
     width?: number;
     height?: number;
-    nsfwDetected?: boolean;
-  };
-  images: {
-    recordId?: string;
-    objectKey: string;
-    title: string;
-    description: string;
-    tags: string[];
-    width: number;
-    height: number;
   }[];
   seq: number;
   createTime: string;

@@ -14,6 +14,7 @@ import {
   type SSEImageInfo,
   type SSEMessage,
 } from '../services/chatService';
+import { uploadChatImage } from '../services/uploadService';
 
 const CATEGORIES = [
   { id: 'yunjin', name: '云锦', nameEn: 'Yunjin', enabled: true },
@@ -63,13 +64,13 @@ interface GeneratedPattern {
   status: 'pending' | 'ready' | 'failed';
   requestId?: string;
   recordId?: string;
+  fileId?: string;
   title: string;
   desc: string;
   tags: string[];
   style: string;
   scene: string;
   imageUrl: string;
-  objectKey?: string;
   errorCode?: string;
   errorMessage?: string;
   retriable?: boolean;
@@ -110,10 +111,21 @@ type ConvMessage = {
   artifact?: {
     status?: string;
     requestId?: string;
-    recordId?: string;
-    recordIds?: string[];
-    objectKey?: string;
-    objectKeys?: string[];
+    fileId?: string;
+    fileIds?: string[];
+    records?: Array<{
+      recordId?: string;
+      recordStatus?: string;
+      status?: string;
+      fileId?: string;
+      title?: string;
+      description?: string;
+      tags?: string[];
+      width?: number;
+      height?: number;
+      failureCode?: string;
+      failureMessage?: string;
+    }>;
     promptSummary?: string;
     remoteStatus?: string;
     width?: number;
@@ -125,12 +137,20 @@ type ConvMessage = {
 
 type ConversationImage = {
   recordId?: string;
-  objectKey: string;
+  fileId?: string;
   title?: string;
   description?: string;
   tags?: string[];
   width?: number;
   height?: number;
+};
+
+type InputAttachment = {
+  localId: string;
+  fileName: string;
+  fileId?: string;
+  status: 'uploading' | 'ready' | 'failed';
+  error?: string;
 };
 
 type PatternStatus = GeneratedPattern['status'];
@@ -457,8 +477,10 @@ export function ZhiHuiPage() {
   const [newSessionAnim, setNewSessionAnim] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [attachments, setAttachments] = useState<InputAttachment[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // AI 任务相关状态
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
@@ -481,7 +503,8 @@ export function ZhiHuiPage() {
   useEffect(() => { patternsRef.current = patterns; }, [patterns]);
 
   // 真实图片读取路径
-  const getImageUrl = (objectKey: string): string => `/api/client/file/images/content?objectKey=${encodeURIComponent(objectKey)}`;
+  const getImageUrl = (fileId?: string): string =>
+    fileId ? `/api/client/file/content/${encodeURIComponent(fileId)}` : '';
 
   const updateLastEventId = (value: string | null) => {
     setLastEventId(value);
@@ -590,19 +613,17 @@ export function ZhiHuiPage() {
   const normalizeConversationRole = (role?: string): 'user' | 'system' =>
     role === 'user' ? 'user' : 'system';
 
-  const normalizeSseImages = (images?: Array<string | SSEImageInfo>): ConversationImage[] => {
+  const normalizeSseImages = (images?: SSEImageInfo[]): ConversationImage[] => {
     if (!Array.isArray(images)) return [];
     return images
       .map((image): ConversationImage | null => {
-        if (typeof image === 'string') {
-          return { objectKey: image };
-        }
-        if (!image?.objectKey) {
+        const fileId = image?.fileId;
+        if (!fileId) {
           return null;
         }
         return {
           recordId: image.recordId,
-          objectKey: image.objectKey,
+          fileId,
           title: image.title,
           description: image.description,
           tags: image.tags,
@@ -640,45 +661,45 @@ export function ZhiHuiPage() {
       title?: string;
       desc?: string;
       tags?: string[];
-      objectKeyFallback?: string;
+      fileIdFallback?: string;
       requestId?: string;
       recordId?: string;
     } = {}
   ): GeneratedPattern | null => {
-    const objectKey = image.objectKey || options.objectKeyFallback || '';
-    if (!objectKey) return null;
+    const fileId = image.fileId || options.fileIdFallback || '';
+    if (!fileId) return null;
     const recordId = image.recordId || options.recordId;
     const requestId = options.requestId;
     return {
-      id: recordId || (requestId ? `${requestId}:${objectKey}` : objectKey),
+      id: recordId || (requestId ? `${requestId}:${fileId}` : fileId),
       status: 'ready',
       requestId,
       recordId,
+      fileId: fileId || undefined,
       title: image.title || options.title || '生成纹样',
       desc: image.description || options.desc || '',
       tags: normalizePatternTags([...(image.tags || []), ...(options.tags || [])], selectedCategory),
       style: image.tags?.[0] || 'AI生成',
       scene: image.description || options.desc || '智绘创作',
-      imageUrl: getImageUrl(objectKey),
-      objectKey,
+      imageUrl: getImageUrl(fileId || undefined),
     };
   };
 
-  const buildPatternFromObjectKey = (
-    objectKey: string,
+  const buildPatternFromFileId = (
+    fileId: string,
     options: { title?: string; desc?: string; tags?: string[]; requestId?: string; recordId?: string } = {}
   ): GeneratedPattern => ({
-    id: options.recordId || (options.requestId ? `${options.requestId}:${objectKey}` : objectKey),
+    id: options.recordId || (options.requestId ? `${options.requestId}:${fileId}` : fileId),
     status: 'ready',
     requestId: options.requestId,
     recordId: options.recordId,
+    fileId,
     title: options.title || '生成纹样',
     desc: options.desc || '',
     tags: normalizePatternTags(options.tags, selectedCategory),
     style: 'AI生成',
     scene: options.desc || '智绘创作',
-    imageUrl: getImageUrl(objectKey),
-    objectKey,
+    imageUrl: getImageUrl(fileId),
   });
 
   const buildPendingPattern = (
@@ -724,8 +745,10 @@ export function ZhiHuiPage() {
     retriable: options.retriable,
   });
 
-  const getPatternAliases = (pattern: Pick<GeneratedPattern, 'id' | 'requestId' | 'recordId' | 'objectKey'>) =>
-    [pattern.id, pattern.requestId, pattern.recordId, pattern.objectKey].filter(
+  const getPatternAliases = (
+    pattern: Pick<GeneratedPattern, 'id' | 'requestId' | 'recordId' | 'fileId'>
+  ) =>
+    [pattern.id, pattern.requestId, pattern.recordId, pattern.fileId].filter(
       (value): value is string => Boolean(value)
     );
 
@@ -753,7 +776,7 @@ export function ZhiHuiPage() {
           id: existing.id || item.id,
           requestId: existing.requestId || item.requestId,
           recordId: existing.recordId || item.recordId,
-          objectKey: existing.objectKey || item.objectKey,
+          fileId: existing.fileId || item.fileId,
         };
         return;
       }
@@ -828,11 +851,22 @@ export function ZhiHuiPage() {
       if (message.role === 'user') return;
 
       const requestId = message.requestId || message.taskId || message.artifact?.requestId;
-      const recordId = message.recordId || message.artifact?.recordId;
+      const artifactRecordIds = (message.artifact?.records || [])
+        .map(record => record.recordId)
+        .filter((value): value is string => Boolean(value));
+      const recordId = message.recordId || artifactRecordIds[0];
       const recordIds = Array.from(
         new Set([
           ...(message.recordIds || []),
-          ...(message.artifact?.recordIds || []),
+          ...artifactRecordIds,
+        ].filter((value): value is string => Boolean(value)))
+      );
+      const fileIds = Array.from(
+        new Set([
+          ...(message.images?.map(image => image.fileId) || []),
+          message.artifact?.fileId,
+          ...(message.artifact?.fileIds || []),
+          ...((message.artifact?.records || []).map(record => record.fileId)),
         ].filter((value): value is string => Boolean(value)))
       );
       const title = message.content || message.artifact?.promptSummary || '生成纹样';
@@ -850,6 +884,20 @@ export function ZhiHuiPage() {
             tags,
           })
         );
+      }
+
+      if (artifactStatus === 'ready') {
+        if (fileIds.length > 0) {
+          nextPatterns.push(
+            ...fileIds.map(fileId => buildPatternFromFileId(fileId, {
+              title,
+              desc,
+              requestId: requestId || undefined,
+              recordId: recordId || undefined,
+              tags,
+            }))
+          );
+        }
       }
 
       if (artifactStatus === 'pending') {
@@ -953,56 +1001,91 @@ export function ZhiHuiPage() {
       const artifact = snapshot.artifact;
       const requestId = artifact.requestId || snapshot.taskId;
       const artifactStatus = normalizeArtifactStatus(artifact.status);
+      const artifactRecords = artifact.records || [];
       const artifactRecordIds = Array.from(
         new Set([
-          ...(artifact.recordIds || []),
-          artifact.recordId,
+          ...artifactRecords.map(record => record.recordId),
         ].filter((value): value is string => Boolean(value)))
       );
-      const artifactKeys = Array.from(
+      const artifactFileIds = Array.from(
         new Set(
-          [artifact.objectKey, ...(artifact.objectKeys || [])].filter(
-            (objectKey): objectKey is string => Boolean(objectKey)
+          [
+            artifact.fileId,
+            ...(artifact.fileIds || []),
+            ...artifactRecords.map(record => record.fileId),
+          ].filter(
+            (fileId): fileId is string => Boolean(fileId)
           )
         )
       );
-      if (artifactStatus === 'ready' && artifactKeys.length > 0) {
-        mergePatterns(
-          artifactKeys.map(objectKey =>
-            buildPatternFromObjectKey(objectKey, {
+      const recordImagePatterns = extractPatternsFromImages(
+        artifactRecords.map(record => ({
+          recordId: record.recordId,
+          fileId: record.fileId,
+          title: record.title,
+          description: record.description,
+          tags: record.tags,
+          width: record.width,
+          height: record.height,
+        })),
+        {
+          title: artifact.promptSummary || nextAssistantText || '生成纹样',
+          desc: artifact.promptSummary || nextAssistantText || '',
+          tags: [selectedCategory],
+          requestId,
+        }
+      );
+      if (artifactStatus === 'ready') {
+        const readyPatterns = [
+          ...recordImagePatterns,
+          ...artifactFileIds.map(fileId =>
+            buildPatternFromFileId(fileId, {
               title: artifact.promptSummary || nextAssistantText || '生成纹样',
               desc: artifact.promptSummary || nextAssistantText || '',
               tags: [selectedCategory],
               requestId,
-              recordId: artifact.recordId,
+              recordId: artifactRecords[0]?.recordId,
             })
-          )
-        );
+          ),
+        ];
+        if (readyPatterns.length > 0) {
+          mergePatterns(readyPatterns);
+        }
       } else if (artifactStatus === 'pending') {
-        mergePatterns([
-          ...(artifactRecordIds.length > 0 ? artifactRecordIds : [requestId]).map(itemId =>
-            buildPendingPattern(requestId, {
+        const pendingIds = artifactRecordIds.length > 0
+          ? artifactRecordIds
+          : requestId
+            ? [requestId]
+            : [];
+        mergePatterns(
+          pendingIds.map(itemId =>
+            buildPendingPattern(requestId || itemId, {
               title: artifact.promptSummary || nextAssistantText || '纹样生成中',
               desc: artifact.promptSummary || nextAssistantText || '图片正在生成，完成后会自动替换为成图',
               tags: [selectedCategory],
-              recordId: itemId === requestId ? artifact.recordId : itemId,
+              recordId: itemId,
             })
-          ),
-        ]);
+          )
+        );
       } else if (artifactStatus === 'failed') {
-        mergePatterns([
-          ...(artifactRecordIds.length > 0 ? artifactRecordIds : [requestId]).map(itemId =>
-            buildFailedPattern(requestId, {
+        const failedIds = artifactRecordIds.length > 0
+          ? artifactRecordIds
+          : requestId
+            ? [requestId]
+            : [];
+        mergePatterns(
+          failedIds.map(itemId =>
+            buildFailedPattern(requestId || itemId, {
               title: artifact.promptSummary || nextAssistantText || '纹样生成失败',
               desc: artifact.promptSummary || nextAssistantText || '图片生成未成功，可重新发起生成。',
               tags: [selectedCategory],
-              recordId: itemId === requestId ? artifact.recordId : itemId,
+              recordId: itemId,
               errorCode: snapshot.error?.code,
               errorMessage: snapshot.error?.message,
               retriable: snapshot.error?.retriable,
             })
-          ),
-        ]);
+          )
+        );
       }
     }
 
@@ -1114,7 +1197,11 @@ export function ZhiHuiPage() {
         }
         break;
       case 'artifact.ready': {
-        const artifactImages = normalizeSseImages(msg.images);
+        const mergedImages = [
+          ...(msg.image ? [msg.image] : []),
+          ...(Array.isArray(msg.images) ? msg.images : []),
+        ];
+        const artifactImages = normalizeSseImages(mergedImages);
         const requestId = msg.requestId || msg.taskId;
         const imagePatterns = artifactImages.length > 0
           ? extractPatternsFromImages(artifactImages, {
@@ -1126,19 +1213,19 @@ export function ZhiHuiPage() {
             })
           : [];
 
-        const objectKeys = Array.from(
+        const fileIds = Array.from(
           new Set(
-            (Array.isArray(msg.objectKeys) && msg.objectKeys.length > 0
-              ? msg.objectKeys
-              : msg.objectKey
-                ? [msg.objectKey]
+            (Array.isArray(msg.fileIds) && msg.fileIds.length > 0
+              ? msg.fileIds
+              : msg.fileId
+                ? [msg.fileId]
                 : []
-            ).filter((objectKey): objectKey is string => Boolean(objectKey))
+            ).filter((fileId): fileId is string => Boolean(fileId))
           )
         );
 
-        const keyPatterns = objectKeys.map(objectKey =>
-          buildPatternFromObjectKey(objectKey, {
+        const filePatterns = fileIds.map(fileId =>
+          buildPatternFromFileId(fileId, {
             title: msg.promptSummary || '生成纹样',
             desc: msg.promptSummary || '',
             tags: [selectedCategory],
@@ -1147,7 +1234,7 @@ export function ZhiHuiPage() {
           })
         );
 
-        mergePatterns([...imagePatterns, ...keyPatterns]);
+        mergePatterns([...imagePatterns, ...filePatterns]);
         setGenState('finalizing');
         break;
       }
@@ -1157,7 +1244,7 @@ export function ZhiHuiPage() {
           new Set([
             ...(msg.recordIds || []),
             msg.recordId,
-            msg.objectKey,
+            msg.fileId,
           ].filter((value): value is string => Boolean(value)))
         );
 
@@ -1385,6 +1472,7 @@ export function ZhiHuiPage() {
     sessionLoadVersionRef.current = loadVersion;
 
     clearTaskState();
+    setAttachments([]);
     updateCurrentSessionId(sessionId);
     setActiveSession(sessionId);
     setIsLoadingHistory(true);
@@ -1402,35 +1490,9 @@ export function ZhiHuiPage() {
         category: DEFAULT_CATEGORY.name,
         timestamp: new Date(m.createTime).toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }),
         taskId: m.taskId,
-        assistantMessageId: m.assistantMessageId,
-        lastEventId: m.lastEventId,
-        lastEventSeq: m.lastEventSeq,
-        status: m.status,
-        phase: m.phase,
-        queuePosition: m.queuePosition ?? null,
-        estimatedWaitMs: m.estimatedWaitMs ?? null,
-        requestId: m.requestId,
-        recordId: m.recordId,
-        recordIds: m.recordIds,
-        artifactStatus: m.artifactStatus,
-        artifact: m.artifact
-          ? {
-              status: m.artifact.status,
-              requestId: m.artifact.requestId,
-              recordId: m.artifact.recordId,
-              recordIds: m.artifact.recordIds,
-              objectKey: m.artifact.objectKey,
-              objectKeys: m.artifact.objectKeys,
-              promptSummary: m.artifact.promptSummary,
-              remoteStatus: m.artifact.remoteStatus,
-              width: m.artifact.width,
-              height: m.artifact.height,
-              nsfwDetected: m.artifact.nsfwDetected,
-            }
-          : undefined,
         images: m.images?.map(image => ({
           recordId: image.recordId,
-          objectKey: image.objectKey,
+          fileId: image.fileId,
           title: image.title,
           description: image.description,
           tags: image.tags,
@@ -1558,26 +1620,100 @@ export function ZhiHuiPage() {
     setZoomPattern(null);
     setGenState('idle');
     setInputValue('');
+    setAttachments([]);
     setTimeout(() => inputRef.current?.focus(), 100);
     toast.success(t('新创作空间已就绪', 'New session ready'), { duration: 1500 });
   };
 
+  const clearComposerAttachments = () => {
+    setAttachments([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handlePickImages = () => {
+    if (isStreaming) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleUploadImages = async (fileList: FileList | null) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+
+    const queue = files.map((file, index) => ({
+      file,
+      localId: `${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`,
+    }));
+
+    setAttachments(prev => [
+      ...prev,
+      ...queue.map(item => ({
+        localId: item.localId,
+        fileName: item.file.name,
+        status: 'uploading' as const,
+      })),
+    ]);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    let successCount = 0;
+    await Promise.all(queue.map(async ({ file, localId }) => {
+      try {
+        const uploaded = await uploadChatImage(file);
+        successCount += 1;
+        setAttachments(prev => prev.map(item =>
+          item.localId === localId
+            ? {
+                ...item,
+                status: 'ready',
+                fileId: uploaded.fileId,
+                error: undefined,
+              }
+            : item
+        ));
+      } catch (err: any) {
+        setAttachments(prev => prev.map(item =>
+          item.localId === localId
+            ? {
+                ...item,
+                status: 'failed',
+                error: err?.message || '上传失败',
+              }
+            : item
+        ));
+      }
+    }));
+
+    if (successCount > 0) {
+      toast.success(`已上传 ${successCount} 张参考图`);
+    }
+  };
+
+  const handleRemoveAttachment = (localId: string) => {
+    setAttachments(prev => prev.filter(item => item.localId !== localId));
+  };
+
   // 普通发送与“再次生图”都走同一条提交流程，确保任务状态、会话刷新和 SSE 订阅完全一致。
-  const submitPrompt = async (rawPrompt: string) => {
+  const submitPrompt = async (rawPrompt: string, fileIds: string[] = []) => {
     const promptText = rawPrompt.trim();
-    if (!promptText || isStreaming) return;
+    const normalizedFileIds = Array.from(new Set(fileIds.filter(Boolean)));
+    if ((!promptText && normalizedFileIds.length === 0) || isStreaming) return;
 
     sessionLoadVersionRef.current += 1;
     const clientMessageId = `local_${Date.now()}`;
+    const displayText = promptText || `上传了 ${normalizedFileIds.length} 张参考图`;
     const userMsg: ConvMessage = {
       id: clientMessageId,
       role: 'user',
-      content: promptText,
+      content: displayText,
       category: selectedCategory,
       timestamp: new Date().toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages(prev => [...prev, userMsg]);
-    setInputValue(prev => (prev.trim() === promptText ? '' : prev));
+    setInputValue('');
 
     const assistantId = `assistant_${Date.now()}`;
     setMessages(prev => [...prev, {
@@ -1599,7 +1735,8 @@ export function ZhiHuiPage() {
       const res = await chatService.submitMessage({
         sessionId: currentSessionId || undefined,
         clientMessageId,
-        text: promptText,
+        text: promptText || undefined,
+        fileIds: normalizedFileIds.length > 0 ? normalizedFileIds : undefined,
         imageStyle,
       });
 
@@ -1626,6 +1763,7 @@ export function ZhiHuiPage() {
         patterns: [],
       });
       setGenState(mapLifecycleState({ status: res.data.status, phase: res.data.phase }));
+      clearComposerAttachments();
 
       void refreshSessions();
       subscribeToTask(taskId, assistantId);
@@ -1639,7 +1777,15 @@ export function ZhiHuiPage() {
   };
 
   const handleSend = async () => {
-    await submitPrompt(inputValue);
+    const hasUploadingAttachment = attachments.some(item => item.status === 'uploading');
+    if (hasUploadingAttachment) {
+      toast.info('图片上传中，请稍候发送');
+      return;
+    }
+    const readyFileIds = attachments
+      .filter(item => item.status === 'ready' && item.fileId)
+      .map(item => item.fileId as string);
+    await submitPrompt(inputValue, readyFileIds);
   };
 
   const handleRegen = async (pattern: GeneratedPattern) => {
@@ -1679,6 +1825,10 @@ export function ZhiHuiPage() {
       toast.error(err.message || '取消失败');
     }
   };
+
+  const hasUploadingAttachment = attachments.some(item => item.status === 'uploading');
+  const readyAttachmentCount = attachments.filter(item => item.status === 'ready' && item.fileId).length;
+  const canSendPrompt = !isStreaming && !hasUploadingAttachment && (Boolean(inputValue.trim()) || readyAttachmentCount > 0);
 
   const isGenerating = genState !== 'idle' && !isTerminalState(genState);
   const showTerminalStatus = genState !== 'idle' && isTerminalState(genState);
@@ -2164,50 +2314,116 @@ export function ZhiHuiPage() {
         {/* ── Input Bar ────────────────────────────────── */}
         <div className="px-5 py-3 flex-shrink-0"
           style={{ borderTop: '1px solid rgba(26,61,74,0.07)', background: 'rgba(245,240,232,0.9)' }}>
-          <div className="flex items-end gap-2 p-2 rounded-2xl"
+          <div className="p-2 rounded-2xl"
             style={{ background: 'white', border: '1px solid rgba(26,61,74,0.1)', boxShadow: '0 1px 12px rgba(26,61,74,0.06)' }}>
-            <div
-              className="flex items-center px-3 py-2 rounded-xl text-xs flex-shrink-0"
-              style={{ background: 'rgba(196,145,42,0.08)', color: '#C4912A' }}
-            >
-              {selectedCategory}
-            </div>
-
-            {/* Textarea */}
-            <textarea
-              ref={inputRef}
-              value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder="描述纹样风格、用途场景、文化意象... (Shift+Enter 换行)"
-              rows={1}
-              className="flex-1 text-sm bg-transparent outline-none resize-none text-[#1A3D4A] placeholder:text-[#9B9590] py-2 leading-relaxed"
-              style={{ maxHeight: 120, overflowY: 'auto', scrollbarWidth: 'none' }}
-              onInput={e => {
-                const el = e.target as HTMLTextAreaElement;
-                el.style.height = 'auto';
-                el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-              }}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+              multiple
+              className="hidden"
+              onChange={e => { void handleUploadImages(e.target.files); }}
             />
 
-            {/* Send / Cancel */}
-            {isStreaming ? (
-              <button onClick={handleCancel}
-                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
-                style={{ background: 'rgba(139,32,32,0.12)', color: '#8B2020' }}
-                title="取消任务">
-                <X className="w-4 h-4" />
-              </button>
-            ) : (
-              <button onClick={handleSend} disabled={!inputValue.trim()}
+            {attachments.length > 0 && (
+              <div className="mb-2 px-1 flex flex-wrap gap-2">
+                {attachments.map(item => (
+                  <div
+                    key={item.localId}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px]"
+                    style={{
+                      background: item.status === 'failed'
+                        ? 'rgba(180,60,60,0.08)'
+                        : item.status === 'uploading'
+                          ? 'rgba(196,145,42,0.1)'
+                          : 'rgba(26,61,74,0.08)',
+                      color: item.status === 'failed'
+                        ? '#8B2020'
+                        : item.status === 'uploading'
+                          ? '#B8821E'
+                          : '#1A3D4A',
+                    }}
+                  >
+                    {item.status === 'uploading' && <Loader2 className="w-3 h-3 animate-spin" />}
+                    <span className="max-w-[180px] truncate">{item.fileName}</span>
+                    {item.status === 'failed' && item.error && <span className="opacity-75">({item.error})</span>}
+                    <button
+                      onClick={() => handleRemoveAttachment(item.localId)}
+                      className="w-4 h-4 rounded flex items-center justify-center"
+                      style={{ background: 'rgba(0,0,0,0.06)' }}
+                      title="移除"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-end gap-2">
+              <div
+                className="flex items-center px-3 py-2 rounded-xl text-xs flex-shrink-0"
+                style={{ background: 'rgba(196,145,42,0.08)', color: '#C4912A' }}
+              >
+                {selectedCategory}
+              </div>
+
+              <button
+                onClick={handlePickImages}
+                disabled={isStreaming}
                 className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
                 style={{
-                  background: inputValue.trim() ? 'linear-gradient(135deg, #1A3D4A, #2A5568)' : 'rgba(26,61,74,0.07)',
-                  color: inputValue.trim() ? 'white' : 'rgba(26,61,74,0.3)',
-                }}>
-                <Send className="w-4 h-4" />
+                  background: isStreaming ? 'rgba(26,61,74,0.07)' : 'rgba(26,61,74,0.08)',
+                  color: isStreaming ? 'rgba(26,61,74,0.35)' : '#1A3D4A',
+                }}
+                title="上传参考图"
+              >
+                <Plus className="w-4 h-4" />
               </button>
-            )}
+
+              {/* Textarea */}
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={e => setInputValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (canSendPrompt) {
+                      void handleSend();
+                    }
+                  }
+                }}
+                placeholder="描述纹样风格、用途场景、文化意象... (Shift+Enter 换行)"
+                rows={1}
+                className="flex-1 text-sm bg-transparent outline-none resize-none text-[#1A3D4A] placeholder:text-[#9B9590] py-2 leading-relaxed"
+                style={{ maxHeight: 120, overflowY: 'auto', scrollbarWidth: 'none' }}
+                onInput={e => {
+                  const el = e.target as HTMLTextAreaElement;
+                  el.style.height = 'auto';
+                  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+                }}
+              />
+
+              {/* Send / Cancel */}
+              {isStreaming ? (
+                <button onClick={handleCancel}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+                  style={{ background: 'rgba(139,32,32,0.12)', color: '#8B2020' }}
+                  title="取消任务">
+                  <X className="w-4 h-4" />
+                </button>
+              ) : (
+                <button onClick={handleSend} disabled={!canSendPrompt}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+                  style={{
+                    background: canSendPrompt ? 'linear-gradient(135deg, #1A3D4A, #2A5568)' : 'rgba(26,61,74,0.07)',
+                    color: canSendPrompt ? 'white' : 'rgba(26,61,74,0.3)',
+                  }}>
+                  <Send className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

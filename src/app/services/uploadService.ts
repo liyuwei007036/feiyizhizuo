@@ -8,13 +8,23 @@ interface ApiResponse<T> {
   data: T;
 }
 
-export async function uploadFile(file: File): Promise<string> {
+export interface UploadedFileInfo {
+  fileId: string;
+  url?: string;
+  fileName?: string;
+  mimeType?: string;
+  size?: number;
+  bucketName?: string;
+  fileScene?: string;
+}
+
+async function uploadByPath(path: string, file: File): Promise<UploadedFileInfo> {
   const token = localStorage.getItem('accessToken');
 
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_BASE}/client/file/upload/file`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -36,13 +46,36 @@ export async function uploadFile(file: File): Promise<string> {
     throw new Error(message);
   }
 
-  const data: ApiResponse<Record<string, string>> = await response.json();
+  const data: ApiResponse<Record<string, string | number | null | undefined>> = await response.json();
 
   if (data.code !== 0 && data.code !== 200) {
     throw new Error(data.message || '上传失败');
   }
 
-  // 返回文件路径或 URL
-  // 尝试常见的字段名
-  return data.data.url || data.data.objectKey || data.data.path || Object.values(data.data)[0] || '';
+  const payload = (data.data && typeof data.data === 'object')
+    ? data.data
+    : { fileId: data.data };
+  const fileId = String(payload.fileId || payload.id || '');
+  if (!fileId) {
+    throw new Error('上传成功但未返回 fileId');
+  }
+
+  return {
+    fileId,
+    url: payload.url ? String(payload.url) : undefined,
+    fileName: payload.fileName ? String(payload.fileName) : undefined,
+    mimeType: payload.mimeType ? String(payload.mimeType) : undefined,
+    size: typeof payload.size === 'number' ? payload.size : undefined,
+    bucketName: payload.bucketName ? String(payload.bucketName) : undefined,
+    fileScene: payload.fileScene ? String(payload.fileScene) : undefined,
+  };
+}
+
+export async function uploadFile(file: File): Promise<string> {
+  const uploaded = await uploadByPath('/client/file/upload/file', file);
+  return uploaded.fileId;
+}
+
+export async function uploadChatImage(file: File): Promise<UploadedFileInfo> {
+  return uploadByPath('/client/file/upload/chat-image', file);
 }
