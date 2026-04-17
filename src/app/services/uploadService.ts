@@ -1,5 +1,7 @@
 // src/app/services/uploadService.ts
 
+import { fetchWithAutoRefresh } from './httpClient';
+
 const API_BASE = '/api';
 
 interface ApiResponse<T> {
@@ -19,16 +21,11 @@ export interface UploadedFileInfo {
 }
 
 async function uploadByPath(path: string, file: File): Promise<UploadedFileInfo> {
-  const token = localStorage.getItem('accessToken');
-
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetchWithAutoRefresh(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: formData,
   });
 

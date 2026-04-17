@@ -1214,6 +1214,11 @@ export function ZhiHuiPage() {
     return nextPatterns;
   };
 
+  const getPatternsForMessage = (message: ConvMessage) =>
+    message.role === 'system'
+      ? extractPatternsFromConversation([message])
+      : [];
+
   const resolveLatestAssistantMessageId = (
     conversation: ConvMessage[],
     taskId?: string | null
@@ -2214,6 +2219,211 @@ export function ZhiHuiPage() {
     await submitPrompt(buildRegeneratePrompt(pattern));
   };
 
+  const renderPatternSection = (messagePatterns: GeneratedPattern[]) => (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+      <p className="text-xs text-[#9B9590] mb-4 px-0.5">
+        {messagePatterns.length} 个创作方向 · 点击图片查看大图
+      </p>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 items-start">
+        {messagePatterns.map((pattern, i) => {
+          const isReady = pattern.status === 'ready';
+          const isPending = pattern.status === 'pending';
+          const isFailed = pattern.status === 'failed';
+          const saved = isReady && isSavedGlobally(pattern.id);
+          const cardBorder = isReady
+            ? (saved ? '2px solid rgba(13,148,136,0.45)' : '1px solid rgba(196,145,42,0.12)')
+            : isPending
+              ? '1px solid rgba(196,145,42,0.14)'
+              : '1px solid rgba(180,60,60,0.18)';
+          const cardShadow = isReady
+            ? (saved
+                ? '0 0 0 3px rgba(13,148,136,0.07), 0 8px 32px rgba(26,61,74,0.1)'
+                : '0 4px 24px rgba(26,61,74,0.08)')
+            : isPending
+              ? '0 4px 20px rgba(26,61,74,0.06)'
+              : '0 4px 20px rgba(180,60,60,0.08)';
+
+          return (
+            <motion.div
+              key={pattern.id}
+              initial={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: i * 0.1, type: 'spring', damping: 24, stiffness: 280 }}
+              className="group rounded-3xl overflow-hidden"
+              style={{
+                background: 'white',
+                border: cardBorder,
+                boxShadow: cardShadow,
+              }}
+            >
+              <div className="relative overflow-hidden" style={{ paddingBottom: '76%' }}>
+                {isReady ? (
+                  <>
+                    <ProtectedImage
+                      src={pattern.imageUrl}
+                      alt={pattern.title}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 cursor-pointer"
+                      onClick={() => setZoomPattern(pattern)}
+                    />
+                    <div className="absolute inset-0"
+                      style={{ background: 'linear-gradient(to top, rgba(11,20,30,0.72) 0%, rgba(11,20,30,0.05) 42%, transparent 100%)' }} />
+                    <button
+                      type="button"
+                      onClick={() => setZoomPattern(pattern)}
+                      className="absolute bottom-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full opacity-0 transition-all duration-200 group-hover:opacity-100"
+                      style={{
+                        background: 'rgba(255,255,255,0.18)',
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid rgba(255,255,255,0.25)',
+                      }}
+                    >
+                      <ZoomIn className="w-3.5 h-3.5 text-white" />
+                    </button>
+                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 px-4 py-3.5">
+                      <p className="text-white text-sm mb-2" style={{ fontWeight: 600, textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
+                        {pattern.title}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {pattern.tags.map(tag => (
+                          <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full"
+                            style={{ background: 'rgba(196,145,42,0.35)', color: '#F5D88A', backdropFilter: 'blur(4px)' }}>{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center"
+                    style={{
+                      background: isPending
+                        ? 'linear-gradient(135deg, rgba(245,240,232,0.9), rgba(255,255,255,0.95))'
+                        : 'linear-gradient(135deg, rgba(255,244,244,0.95), rgba(255,255,255,0.98))',
+                    }}
+                  >
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+                      style={{
+                        background: isPending ? 'rgba(196,145,42,0.12)' : 'rgba(180,60,60,0.1)',
+                        color: isPending ? '#C4912A' : '#B23A3A',
+                      }}
+                    >
+                      {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <X className="w-5 h-5" />}
+                    </div>
+                    <p className="text-sm mb-1" style={{ fontWeight: 600, color: isPending ? '#1A3D4A' : '#8B2020' }}>
+                      {PATTERN_STATUS_LABELS[pattern.status]}
+                    </p>
+                    {!isPending && (
+                      <>
+                        <p className="text-xs leading-relaxed" style={{ color: '#6B6558' }}>
+                          {pattern.title}
+                        </p>
+                        <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#9B9590' }}>
+                          {pattern.desc}
+                        </p>
+                      </>
+                    )}
+                    {isFailed && pattern.errorMessage && (
+                      <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#B23A3A' }}>
+                        {pattern.errorMessage}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {!isPending && (
+                <div className="flex items-center gap-2 px-4 py-3"
+                  style={{ background: 'linear-gradient(to right, #FDFAF5, #FBF7EE)', borderTop: '1px solid rgba(196,145,42,0.1)' }}>
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-[11px] leading-5 text-[#6B6558]"
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {pattern.desc}
+                    </p>
+                  </div>
+                  {isReady ? (
+                    <>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleToggleSave(pattern); }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
+                        style={saved
+                          ? { background: 'rgba(13,148,136,0.1)', color: '#0d9488', border: '1px solid rgba(13,148,136,0.25)' }
+                          : { background: 'rgba(196,145,42,0.08)', color: '#B8821E', border: '1px solid rgba(196,145,42,0.22)' }
+                        }
+                        onMouseEnter={e => {
+                          if (!saved) {
+                            (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.16)';
+                            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.4)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (!saved) {
+                            (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.08)';
+                            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.22)';
+                          }
+                        }}
+                      >
+                        {saved
+                          ? <><BookmarkCheck className="w-3 h-3" /> 已收录</>
+                          : <><Bookmark className="w-3 h-3" /> 收录至我的纹库</>
+                        }
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
+                        style={{
+                          background: 'rgba(26,61,74,0.06)',
+                          color: '#6B6558',
+                          border: '1px solid rgba(26,61,74,0.1)',
+                        }}
+                        onMouseEnter={e => {
+                          (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.1)';
+                          (e.currentTarget as HTMLElement).style.color = '#1A3D4A';
+                        }}
+                        onMouseLeave={e => {
+                          (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.06)';
+                          (e.currentTarget as HTMLElement).style.color = '#6B6558';
+                        }}
+                      >
+                        <RotateCcw className="w-3 h-3" /> 再次生图
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
+                      style={{
+                        background: 'rgba(180,60,60,0.08)',
+                        color: '#8B2020',
+                        border: '1px solid rgba(180,60,60,0.18)',
+                      }}
+                    >
+                      <RotateCcw className="w-3 h-3" /> 再次生图
+                    </button>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          );
+        })}
+      </div>
+
+      <motion.p
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.65 }}
+        className="text-center text-[11px] mt-4 text-[#9B9590]"
+      >
+        点击图片可放大查看 · 在大图中可收录至我的纹库
+      </motion.p>
+    </motion.div>
+  );
+
   // 取消正在进行的任务
   const handleCancel = async () => {
     if (!currentTaskId) return;
@@ -2423,264 +2633,79 @@ export function ZhiHuiPage() {
           )}
 
           {/* Messages */}
-          {messages.map(msg => (
-            <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              className={`mb-4 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'system' && (
-                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mr-2.5 mt-0.5"
-                  style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
-                  <Sparkles className="w-3.5 h-3.5 text-[#C4912A]" />
-                </div>
-              )}
-              <div className={`max-w-2xl px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                msg.role === 'user' ? 'text-white rounded-tr-sm' : 'text-[#1A3D4A] rounded-tl-sm'
-              }`} style={msg.role === 'user'
-                ? { background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }
-                : { background: 'white', border: '1px solid rgba(26,61,74,0.07)' }}>
-                {msg.role === 'user' && msg.category && (
-                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full mb-2 mr-2"
-                    style={{ background: 'rgba(196,145,42,0.2)', color: '#C4912A' }}>{msg.category}</span>
-                )}
-                {msg.content}
-                <div className={`text-[10px] mt-1.5 ${msg.role === 'user' ? 'text-white/35' : 'text-[#9B9590]'}`}>
-                  {msg.timestamp}
-                </div>
-              </div>
-            </motion.div>
-          ))}
+          {messages.map(msg => {
+            const messagePatterns = getPatternsForMessage(msg);
+            const showInlineStatus =
+              msg.role === 'system' &&
+              msg.id === assistantMsgId &&
+              showStatusText &&
+              Boolean(taskStatusLine);
 
-          <AnimatePresence>
-            {showStatusText && taskStatusLine && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                className="mb-4 flex items-start gap-2.5"
-              >
-                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                  style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
-                  <Sparkles className="w-3.5 h-3.5 text-[#C4912A]" />
-                </div>
-                <div className="pt-1 text-sm leading-relaxed" style={{ color: taskStatusTone }}>
-                  <span className="inline-flex items-center gap-2">
-                    {isGenerating ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C4912A]" />
-                    ) : (
-                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                    )}
-                    <span>{taskStatusLine}</span>
-                  </span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── ④ Generated Patterns: 2×2, image-first, luxurious footer ── */}
-          <AnimatePresence>
-            {patterns.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-                <p className="text-xs text-[#9B9590] mb-4 px-0.5">
-                  {patterns.length} 个创作方向 · 点击图片查看大图
-                </p>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 items-start">
-                  {patterns.map((pattern, i) => {
-                    const isReady = pattern.status === 'ready';
-                    const isPending = pattern.status === 'pending';
-                    const isFailed = pattern.status === 'failed';
-                    const saved = isReady && isSavedGlobally(pattern.id);
-                    const cardBorder = isReady
-                      ? (saved ? '2px solid rgba(13,148,136,0.45)' : '1px solid rgba(196,145,42,0.12)')
-                      : isPending
-                        ? '1px solid rgba(196,145,42,0.14)'
-                        : '1px solid rgba(180,60,60,0.18)';
-                    const cardShadow = isReady
-                      ? (saved
-                          ? '0 0 0 3px rgba(13,148,136,0.07), 0 8px 32px rgba(26,61,74,0.1)'
-                          : '0 4px 24px rgba(26,61,74,0.08)')
-                      : isPending
-                        ? '0 4px 20px rgba(26,61,74,0.06)'
-                        : '0 4px 20px rgba(180,60,60,0.08)';
-                    return (
-                      <motion.div
-                        key={pattern.id}
-                        initial={{ opacity: 0, scale: 0.94 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.1, type: 'spring', damping: 24, stiffness: 280 }}
-                        className="group rounded-3xl overflow-hidden"
-                        style={{
-                          background: 'white',
-                          border: cardBorder,
-                          boxShadow: cardShadow,
-                        }}
+            return (
+              <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className={`mb-4 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'system' ? (
+                  <>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mr-2.5 mt-0.5"
+                      style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
+                      <Sparkles className="w-3.5 h-3.5 text-[#C4912A]" />
+                    </div>
+                    <div className="min-w-0 w-full">
+                      <div
+                        className="max-w-2xl px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed text-[#1A3D4A]"
+                        style={{ background: 'white', border: '1px solid rgba(26,61,74,0.07)' }}
                       >
-                        <div className="relative overflow-hidden" style={{ paddingBottom: '76%' }}>
-                          {isReady ? (
-                            <>
-                              <ProtectedImage
-                                src={pattern.imageUrl}
-                                alt={pattern.title}
-                                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 cursor-pointer"
-                                onClick={() => setZoomPattern(pattern)}
-                              />
-                              <div className="absolute inset-0"
-                                style={{ background: 'linear-gradient(to top, rgba(11,20,30,0.72) 0%, rgba(11,20,30,0.05) 42%, transparent 100%)' }} />
-                              <button
-                                type="button"
-                                onClick={() => setZoomPattern(pattern)}
-                                className="absolute bottom-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full opacity-0 transition-all duration-200 group-hover:opacity-100"
-                                style={{
-                                  background: 'rgba(255,255,255,0.18)',
-                                  backdropFilter: 'blur(8px)',
-                                  border: '1px solid rgba(255,255,255,0.25)',
-                                }}
-                              >
-                                <ZoomIn className="w-3.5 h-3.5 text-white" />
-                              </button>
-                              <div className="pointer-events-none absolute bottom-0 left-0 right-0 px-4 py-3.5">
-                                <p className="text-white text-sm mb-2" style={{ fontWeight: 600, textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
-                                  {pattern.title}
-                                </p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {pattern.tags.map(tag => (
-                                    <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full"
-                                      style={{ background: 'rgba(196,145,42,0.35)', color: '#F5D88A', backdropFilter: 'blur(4px)' }}>{tag}</span>
-                                  ))}
-                                </div>
-                              </div>
-                            </>
-                          ) : (
-                            <div
-                              className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center"
-                              style={{
-                                background: isPending
-                                  ? 'linear-gradient(135deg, rgba(245,240,232,0.9), rgba(255,255,255,0.95))'
-                                  : 'linear-gradient(135deg, rgba(255,244,244,0.95), rgba(255,255,255,0.98))',
-                              }}
-                            >
-                              <div
-                                className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
-                                style={{
-                                  background: isPending ? 'rgba(196,145,42,0.12)' : 'rgba(180,60,60,0.1)',
-                                  color: isPending ? '#C4912A' : '#B23A3A',
-                                }}
-                              >
-                                {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <X className="w-5 h-5" />}
-                              </div>
-                              <p className="text-sm mb-1" style={{ fontWeight: 600, color: isPending ? '#1A3D4A' : '#8B2020' }}>
-                                {PATTERN_STATUS_LABELS[pattern.status]}
-                              </p>
-                              {!isPending && (
-                                <>
-                                  <p className="text-xs leading-relaxed" style={{ color: '#6B6558' }}>
-                                    {pattern.title}
-                                  </p>
-                                  <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#9B9590' }}>
-                                    {pattern.desc}
-                                  </p>
-                                </>
-                              )}
-                              {isFailed && pattern.errorMessage && (
-                                <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#B23A3A' }}>
-                                  {pattern.errorMessage}
-                                </p>
-                              )}
-                            </div>
-                          )}
+                        {msg.content}
+                        <div className="text-[10px] mt-1.5 text-[#9B9590]">
+                          {msg.timestamp}
                         </div>
+                      </div>
 
-                        {!isPending && (
-                          <div className="flex items-center gap-2 px-4 py-3"
-                            style={{ background: 'linear-gradient(to right, #FDFAF5, #FBF7EE)', borderTop: '1px solid rgba(196,145,42,0.1)' }}>
-                            <div className="flex-1 min-w-0">
-                              <p
-                                className="text-[11px] leading-5 text-[#6B6558]"
-                                style={{
-                                  display: '-webkit-box',
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: 'vertical',
-                                  overflow: 'hidden',
-                                }}
-                              >
-                                {pattern.desc}
-                              </p>
+                      <AnimatePresence>
+                        {showInlineStatus && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 8 }}
+                            className="mt-3 px-0.5"
+                          >
+                            <div className="pt-1 text-sm leading-relaxed" style={{ color: taskStatusTone }}>
+                              <span className="inline-flex items-center gap-2">
+                                {isGenerating ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C4912A]" />
+                                ) : (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                )}
+                                <span>{taskStatusLine}</span>
+                              </span>
                             </div>
-                            {isReady ? (
-                              <>
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleToggleSave(pattern); }}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
-                                  style={saved
-                                    ? { background: 'rgba(13,148,136,0.1)', color: '#0d9488', border: '1px solid rgba(13,148,136,0.25)' }
-                                    : { background: 'rgba(196,145,42,0.08)', color: '#B8821E', border: '1px solid rgba(196,145,42,0.22)' }
-                                  }
-                                  onMouseEnter={e => {
-                                    if (!saved) {
-                                      (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.16)';
-                                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.4)';
-                                    }
-                                  }}
-                                  onMouseLeave={e => {
-                                    if (!saved) {
-                                      (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.08)';
-                                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.22)';
-                                    }
-                                  }}
-                                >
-                                  {saved
-                                    ? <><BookmarkCheck className="w-3 h-3" /> 已收录</>
-                                    : <><Bookmark className="w-3 h-3" /> 收录至我的纹库</>
-                                  }
-                                </button>
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
-                                  style={{
-                                    background: 'rgba(26,61,74,0.06)',
-                                    color: '#6B6558',
-                                    border: '1px solid rgba(26,61,74,0.1)',
-                                  }}
-                                  onMouseEnter={e => {
-                                    (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.1)';
-                                    (e.currentTarget as HTMLElement).style.color = '#1A3D4A';
-                                  }}
-                                  onMouseLeave={e => {
-                                    (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.06)';
-                                    (e.currentTarget as HTMLElement).style.color = '#6B6558';
-                                  }}
-                                >
-                                  <RotateCcw className="w-3 h-3" /> 再次生图
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
-                                style={{
-                                  background: 'rgba(180,60,60,0.08)',
-                                  color: '#8B2020',
-                                  border: '1px solid rgba(180,60,60,0.18)',
-                                }}
-                              >
-                                <RotateCcw className="w-3 h-3" /> 再次生图
-                              </button>
-                            )}
-                          </div>
+                          </motion.div>
                         )}
-                      </motion.div>
-                    );
-                  })}
-                </div>
+                      </AnimatePresence>
 
-                <motion.p
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.65 }}
-                  className="text-center text-[11px] mt-4 text-[#9B9590]"
-                >
-                  点击图片可放大查看 · 在大图中可收录至我的纹库
-                </motion.p>
+                      {messagePatterns.length > 0 && (
+                        <div className="mt-4">
+                          {renderPatternSection(messagePatterns)}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="max-w-2xl px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed text-white"
+                    style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
+                    {msg.category && (
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full mb-2 mr-2"
+                        style={{ background: 'rgba(196,145,42,0.2)', color: '#C4912A' }}>{msg.category}</span>
+                    )}
+                    {msg.content}
+                    <div className="text-[10px] mt-1.5 text-white/35">
+                      {msg.timestamp}
+                    </div>
+                  </div>
+                )}
               </motion.div>
-            )}
-          </AnimatePresence>
+            );
+          })}
 
           <div ref={bottomRef} />
         </div>

@@ -1,5 +1,14 @@
 // src/app/services/authService.ts
 
+import {
+  clearAuthSession,
+  persistAuthSession,
+  setStoredUser,
+  type AuthUser,
+  type TokenPayload,
+} from './authSession';
+import { requestJson, type ApiResponse } from './httpClient';
+
 const API_BASE = '/api';
 
 interface LoginRequest {
@@ -17,87 +26,77 @@ interface RegisterRequest {
   password: string;
 }
 
-interface TokenVO {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-  user: {
-    id: string;
-    account: string;
-    displayName: string;
-    avatarUrl?: string;
-    badge?: string;
-  };
-}
-
-interface ApiResponse<T> {
-  code: number;
-  message: string;
-  data: T;
+export interface TokenVO extends TokenPayload {
+  user: AuthUser;
 }
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  config: { auth?: boolean } = {}
 ): Promise<ApiResponse<T>> {
-  const token = localStorage.getItem('accessToken');
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-
-  const data = await response.json();
-
-  if (data.code !== 0 && data.code !== 200) {
-    throw new Error(data.message || '请求失败');
-  }
-
-  return data;
+  return requestJson<T>(`${API_BASE}${path}`, options, config);
 }
 
 export const authService = {
   // 密码登录
-  login: (data: LoginRequest) =>
-    request<TokenVO>('/client/auth/login', {
+  login: async (data: LoginRequest) => {
+    const response = await request<TokenVO>('/client/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
+    }, { auth: false });
+
+    persistAuthSession(response.data);
+    return response;
+  },
 
   // 发送验证码
   sendCode: (data: SendCodeRequest) =>
     request<{ cooldownSeconds: number }>('/client/auth/send-code', {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
+    }, { auth: false }),
 
   // 注册
-  register: (data: RegisterRequest) =>
-    request<TokenVO>('/client/auth/register', {
+  register: async (data: RegisterRequest) => {
+    const response = await request<TokenVO>('/client/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
+    }, { auth: false });
+
+    persistAuthSession(response.data);
+    return response;
+  },
 
   // 获取当前用户
-  getCurrentUser: () =>
-    request<TokenVO['user']>('/client/auth/current-user', {
+  getCurrentUser: async () => {
+    const response = await request<TokenVO['user']>('/client/auth/current-user', {
       method: 'GET',
-    }),
+    });
+
+    setStoredUser(response.data);
+    return response;
+  },
 
   // 刷新令牌
-  refreshToken: (accessToken: string, refreshToken: string) =>
-    request<TokenVO>('/client/auth/refresh-token', {
+  refreshToken: async (accessToken: string, refreshToken: string) => {
+    const response = await request<TokenVO>('/client/auth/refresh-token', {
       method: 'POST',
       body: JSON.stringify({ accessToken, refreshToken }),
-    }),
+    }, { auth: false });
+
+    persistAuthSession(response.data);
+    return response;
+  },
 
   // 登出
-  logout: () =>
-    request<void>('/client/auth/logout', {
-      method: 'POST',
-    }),
+  logout: async () => {
+    try {
+      return await request<void>('/client/auth/logout', {
+        method: 'POST',
+      });
+    } finally {
+      clearAuthSession();
+    }
+  },
 };

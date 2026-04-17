@@ -1,15 +1,17 @@
 // src/app/context/AuthContext.tsx
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { authService } from '../services/authService';
+import {
+  clearAuthSession,
+  readAuthSession,
+  readStoredUser,
+  subscribeAuthSession,
+  type AuthUser,
+} from '../services/authSession';
 
-interface User {
-  id: string;
-  account: string;
-  displayName: string;
-  avatarUrl?: string;
-  badge?: string;
-}
+type User = AuthUser;
 
 interface AuthContextType {
   user: User | null;
@@ -24,38 +26,67 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const TOKEN_KEY = 'accessToken';
-const REFRESH_TOKEN_KEY = 'refreshToken';
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [user, setUser] = useState<User | null>(() => readStoredUser());
   const [isLoading, setIsLoading] = useState(true);
+
+  const isAuthPage =
+    location.pathname === '/' ||
+    location.pathname === '/login' ||
+    location.pathname === '/register';
+
+  useEffect(() => {
+    return subscribeAuthSession(snapshot => {
+      setUser(snapshot.user);
+    });
+  }, []);
 
   // 初始化时检查本地 token
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem(TOKEN_KEY);
-      if (token) {
+      const session = readAuthSession();
+
+      if (session.user) {
+        setUser(session.user);
+      }
+
+      if (session.accessToken || session.refreshToken) {
         try {
           const res = await authService.getCurrentUser();
           if (res.data) {
             setUser(res.data);
           }
         } catch {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(REFRESH_TOKEN_KEY);
+          clearAuthSession();
         }
       }
+
       setIsLoading(false);
     };
-    initAuth();
+
+    void initAuth();
   }, []);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (user) {
+      if (isAuthPage) {
+        navigate('/zhihui', { replace: true });
+      }
+      return;
+    }
+
+    if (!isAuthPage) {
+      navigate('/login', { replace: true });
+    }
+  }, [isAuthPage, isLoading, navigate, user]);
 
   const login = useCallback(async (account: string, password: string) => {
     const res = await authService.login({ account, password });
     if (res.data) {
-      localStorage.setItem(TOKEN_KEY, res.data.accessToken);
-      localStorage.setItem(REFRESH_TOKEN_KEY, res.data.refreshToken);
       setUser(res.data.user);
     }
   }, []);
@@ -64,8 +95,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 验证码登录: 调用注册接口完成登录
     const res = await authService.register({ phone, code, password: '' });
     if (res.data) {
-      localStorage.setItem(TOKEN_KEY, res.data.accessToken);
-      localStorage.setItem(REFRESH_TOKEN_KEY, res.data.refreshToken);
       setUser(res.data.user);
     }
   }, []);
@@ -73,8 +102,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (phone: string, code: string, password: string) => {
     const res = await authService.register({ phone, code, password });
     if (res.data) {
-      localStorage.setItem(TOKEN_KEY, res.data.accessToken);
-      localStorage.setItem(REFRESH_TOKEN_KEY, res.data.refreshToken);
       setUser(res.data.user);
     }
   }, []);
@@ -83,8 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authService.logout();
     } finally {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      clearAuthSession();
       setUser(null);
     }
   }, []);

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ImgHTMLAttributes } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { fetchWithAutoRefresh } from '../services/httpClient';
 
 export function ProtectedImage({
   src,
@@ -25,22 +26,13 @@ export function ProtectedImage({
       return;
     }
 
-    const token = window.localStorage.getItem('accessToken') ?? '';
-    if (!token) {
-      setResolvedSrc(src);
-      return;
-    }
-
     const controller = new AbortController();
     let objectUrl: string | null = null;
     let cancelled = false;
 
     setResolvedSrc(null);
 
-    void fetch(src, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+    void fetchWithAutoRefresh(src, {
       signal: controller.signal,
     })
       .then(async response => {

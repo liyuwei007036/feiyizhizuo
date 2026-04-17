@@ -1,5 +1,5 @@
 import React from 'react';
-import { createBrowserRouter, Navigate, Outlet, useRouteError } from 'react-router';
+import { createBrowserRouter, Outlet, useRouteError } from 'react-router';
 import { AppLayout } from './components/layout/AppLayout';
 import { ZhiHuiPage } from './pages/ZhiHuiPage';
 import { InspirationLibraryPage } from './pages/InspirationLibraryPage';
@@ -8,7 +8,7 @@ import { AdminPage } from './pages/AdminPage';
 import { PatternMarketPage } from './pages/PatternMarketPage';
 import { PermissionGuard } from './components/PermissionGuard';
 import { AppProvider } from './context/AppContext';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import type { ModuleKey } from './context/AppContext';
@@ -103,7 +103,6 @@ export const router = createBrowserRouter(
 );
 
 function RootLayout() {
-  const { isAuthenticated } = useAuth();
   return (
     <AppLayout>
       <Outlet />

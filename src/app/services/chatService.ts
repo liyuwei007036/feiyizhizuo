@@ -1,17 +1,12 @@
 // src/app/services/chatService.ts
 
+import { readAuthSession } from './authSession';
+import { fetchWithAutoRefresh, requestJson, type ApiResponse } from './httpClient';
+
 // AI 服务走 /ai 代理 → /ump-client-ai-service（微服务架构）
 const API_BASE = '/ai';
 
 // ==================== 类型定义 ====================
-
-export interface ApiResponse<T> {
-  code: number;
-  message: string;
-  data: T;
-  timestamp?: string;
-  requestId?: string;
-}
 
 // 提交消息
 export interface SendMessageRequest {
@@ -203,36 +198,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  const token = localStorage.getItem('accessToken');
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-
-  // 检查 HTTP 状态码
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`;
-    try {
-      const errData = await response.json();
-      message = errData.message || message;
-    } catch {
-      // 非 JSON 响应，使用状态码消息
-    }
-    throw new Error(message);
-  }
-
-  const data = await response.json();
-
-  if (data.code !== 0 && data.code !== 200) {
-    throw new Error(data.message || '请求失败');
-  }
-
-  return data;
+  return requestJson<T>(`${API_BASE}${path}`, options);
 }
 
 // ==================== 导出方法 ====================
@@ -309,7 +275,6 @@ export const chatService = {
     onMessage: (msg: SSEMessage) => void,
     options?: SubscribeEventsOptions
   ) => {
-    const token = localStorage.getItem('accessToken') ?? '';
     const initialLastEventId = options?.lastEventId?.trim() || '';
     const baseReconnectDelayMs = options?.reconnectDelayMs ?? 1500;
     const maxReconnectDelayMs = options?.maxReconnectDelayMs ?? 10000;
@@ -480,13 +445,15 @@ export const chatService = {
         });
 
         try {
-          const response = await fetch(requestUrl, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              ...(currentLastEventId ? { 'Last-Event-ID': currentLastEventId } : {}),
-            },
-            signal: activeController.signal,
-          });
+          const response = await fetchWithAutoRefresh(
+            requestUrl,
+            {
+              headers: currentLastEventId
+                ? { 'Last-Event-ID': currentLastEventId }
+                : undefined,
+              signal: activeController.signal,
+            }
+          );
 
           if (closed || terminal) return;
 
@@ -602,6 +569,12 @@ export const chatService = {
           }
 
           if ((err as Error)?.name === 'AbortError') {
+            return;
+          }
+
+          const { accessToken, refreshToken } = readAuthSession();
+          if (!accessToken && !refreshToken) {
+            emitTaskFailed('登录已过期，请重新登录');
             return;
           }
 
