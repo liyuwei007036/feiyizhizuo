@@ -2250,7 +2250,7 @@ export function ZhiHuiPage() {
   const canSendPrompt = !isStreaming && !hasUploadingAttachment && (Boolean(inputValue.trim()) || readyAttachmentCount > 0);
 
   const isGenerating = genState !== 'idle' && !isTerminalState(genState);
-  const showTerminalStatus = genState !== 'idle' && isTerminalState(genState);
+  const showTerminalStatus = genState !== 'idle' && isTerminalState(genState) && genState !== 'done';
   const showStatusText = isGenerating || showTerminalStatus;
   const taskStatusText = genState !== 'idle' ? TASK_STAGE_COPY[genState] : '';
   const taskStatusHint = isGenerating
