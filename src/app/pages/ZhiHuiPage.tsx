@@ -6,15 +6,18 @@ import type { MyPattern } from '../context/AppContext';
 import { toast } from 'sonner';
 import {
   Plus, Send, Sparkles, X, RotateCcw, Loader2, Clock,
-  ZoomIn, Bookmark, BookmarkCheck,
+  ZoomIn, Bookmark, BookmarkCheck, CheckCircle2, AlertCircle,
+  Image as ImageIcon, Wifi, WifiOff,
 } from 'lucide-react';
 import {
   chatService,
   type SSEConnectionState,
+  type SSEConnectionEvent,
   type SSEImageInfo,
   type SSEMessage,
 } from '../services/chatService';
 import { uploadChatImage } from '../services/uploadService';
+import { ProtectedImage } from '../components/ProtectedImage';
 
 const CATEGORIES = [
   { id: 'yunjin', name: '云锦', nameEn: 'Yunjin', enabled: true },
@@ -145,6 +148,16 @@ type ConversationImage = {
   height?: number;
 };
 
+type TaskEventLogItem = {
+  id: string;
+  kind: 'event' | 'connection';
+  title: string;
+  detail?: string;
+  eventType?: string;
+  connectionState?: SSEConnectionState;
+  occurredAt: number;
+};
+
 type InputAttachment = {
   localId: string;
   fileName: string;
@@ -162,6 +175,7 @@ const PATTERN_STATUS_LABELS: Record<PatternStatus, string> = {
 };
 
 const ACTIVE_TASK_STORAGE_KEY = 'zhihui:active-task-map:v1';
+const TASK_EVENT_LOG_LIMIT = 12;
 const RECOVERABLE_TASK_STATUSES = new Set(['PENDING', 'RUNNING', 'CANCEL_REQUESTED']);
 
 const readPersistedTaskMap = (): Record<string, PersistedTaskRecord> => {
@@ -202,7 +216,7 @@ function ImageZoomModal({ pattern, isSaved, onToggleSave, onRegen, onClose }: {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 flex items-center justify-center z-50 p-8"
+      className="fixed inset-0 z-50"
       style={{ background: 'rgba(10,20,30,0.94)', backdropFilter: 'blur(14px)' }}
       onClick={onClose}
     >
@@ -211,53 +225,79 @@ function ImageZoomModal({ pattern, isSaved, onToggleSave, onRegen, onClose }: {
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.92, y: 16 }}
         transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-        className="max-w-3xl w-full rounded-3xl overflow-hidden shadow-2xl"
+        className="relative flex h-full w-full flex-col overflow-hidden"
         style={{ background: '#0B1822' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="relative">
-          <img src={pattern.imageUrl} alt={pattern.title}
-            className="w-full object-cover" style={{ maxHeight: 500, objectFit: 'cover' }} />
-          {/* Controls */}
-          <div className="absolute top-4 right-4 flex gap-2">
-            <button onClick={onClose}
-              className="w-9 h-9 rounded-full flex items-center justify-center backdrop-blur"
-              style={{ background: 'rgba(0,0,0,0.5)' }}>
-              <X className="w-4 h-4 text-white/70" />
-            </button>
-          </div>
-          {/* Info overlay */}
-          <div className="absolute bottom-0 left-0 right-0 px-6 py-5"
-            style={{ background: 'linear-gradient(to top, rgba(11,24,34,0.95) 0%, rgba(11,24,34,0.5) 55%, transparent 100%)' }}>
-            <p className="text-white mb-1.5" style={{ fontSize: 20, fontWeight: 600 }}>{pattern.title}</p>
-            <p className="text-white/60 text-sm leading-relaxed mb-3">{pattern.desc}</p>
-            <div className="flex flex-wrap gap-2">
-              {pattern.tags.map(tag => (
-                <span key={tag} className="text-xs px-2.5 py-1 rounded-full"
-                  style={{ background: 'rgba(196,145,42,0.3)', color: '#F5D88A', backdropFilter: 'blur(4px)' }}>{tag}</span>
-              ))}
-              <span className="text-xs px-2.5 py-1 rounded-full"
-                style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.55)' }}>{pattern.style}</span>
-              <span className="text-xs px-2.5 py-1 rounded-full"
-                style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.55)' }}>{pattern.scene}</span>
-            </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-5 right-5 z-10 flex h-10 w-10 items-center justify-center rounded-full backdrop-blur"
+          style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.12)' }}
+        >
+          <X className="w-4 h-4 text-white/80" />
+        </button>
+
+        <div className="flex-1 min-h-0 px-6 pt-6 pb-4 md:px-10 md:pt-10">
+          <div className="flex h-full items-center justify-center">
+            <ProtectedImage
+              src={pattern.imageUrl}
+              alt={pattern.title}
+              className="max-h-full max-w-full object-contain"
+            />
           </div>
         </div>
-        {/* Actions */}
-        <div className="flex items-center gap-3 px-6 py-4">
-          <button onClick={onToggleSave}
-            className="flex-1 py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all"
-            style={isSaved
-              ? { background: 'rgba(13,148,136,0.15)', color: '#2dd4bf', border: '1px solid rgba(13,148,136,0.3)' }
-              : { background: 'linear-gradient(135deg, #C4912A, #D9A83C)', color: '#0B1822' }
-            }>
-            {isSaved ? <><BookmarkCheck className="w-4 h-4" /> 已收录至我的纹库</> : <><Bookmark className="w-4 h-4" /> 收录至我的纹库</>}
-          </button>
-          <button onClick={() => { onRegen(); onClose(); }}
-            className="px-5 py-3 rounded-2xl text-sm flex items-center gap-2 transition-all"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.09)' }}>
-            <RotateCcw className="w-4 h-4" /> 再次生图
-          </button>
+
+        <div
+          className="shrink-0 border-t px-6 py-5 md:px-10"
+          style={{
+            borderColor: 'rgba(255,255,255,0.08)',
+            background: 'linear-gradient(to top, rgba(11,24,34,0.96) 0%, rgba(11,24,34,0.88) 100%)',
+          }}
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-white" style={{ fontSize: 20, fontWeight: 600 }}>{pattern.title}</p>
+                {pattern.tags.length > 0 && (
+                  <>
+                  {pattern.tags.map(tag => (
+                    <span
+                      key={tag}
+                      className="rounded-full px-2.5 py-1 text-xs"
+                      style={{ background: 'rgba(196,145,42,0.3)', color: '#F5D88A', backdropFilter: 'blur(4px)' }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                  </>
+                )}
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-white/65">{pattern.desc}</p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={onToggleSave}
+                className="flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm transition-all"
+                style={isSaved
+                  ? { background: 'rgba(13,148,136,0.15)', color: '#2dd4bf', border: '1px solid rgba(13,148,136,0.3)' }
+                  : { background: 'linear-gradient(135deg, #C4912A, #D9A83C)', color: '#0B1822' }
+                }
+              >
+                {isSaved ? <><BookmarkCheck className="w-4 h-4" /> 已收录至我的纹库</> : <><Bookmark className="w-4 h-4" /> 收录至我的纹库</>}
+              </button>
+              <button
+                type="button"
+                onClick={() => { onRegen(); onClose(); }}
+                className="flex items-center gap-2 rounded-2xl px-5 py-3 text-sm transition-all"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.09)' }}
+              >
+                <RotateCcw className="w-4 h-4" /> 再次生图
+              </button>
+            </div>
+          </div>
         </div>
       </motion.div>
     </motion.div>
@@ -422,6 +462,12 @@ const formatSessionTime = (timeText?: string) => {
     .replace(/\//g, '-');
 };
 
+const formatMessageTime = (timeValue?: string | number | Date | null) =>
+  new Date(timeValue ?? Date.now()).toLocaleTimeString('zh', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
 const normalizeArtifactStatus = (status?: string | null): PatternStatus | null => {
   if (!status) return null;
   const normalized = status.trim().toUpperCase();
@@ -478,6 +524,7 @@ export function ZhiHuiPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [attachments, setAttachments] = useState<InputAttachment[]>([]);
+  const [taskEventLog, setTaskEventLog] = useState<TaskEventLogItem[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -575,6 +622,39 @@ export function ZhiHuiPage() {
     });
   };
 
+  const clearTaskEventLog = () => {
+    setTaskEventLog([]);
+  };
+
+  const pushTaskEvent = useCallback((
+    entry: Omit<TaskEventLogItem, 'id' | 'occurredAt'> & { occurredAt?: number }
+  ) => {
+    const nextEntry: TaskEventLogItem = {
+      ...entry,
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      occurredAt: entry.occurredAt ?? Date.now(),
+    };
+
+    setTaskEventLog(prev => {
+      const last = prev[prev.length - 1];
+      if (
+        last &&
+        last.kind === nextEntry.kind &&
+        last.title === nextEntry.title &&
+        last.detail === nextEntry.detail &&
+        last.eventType === nextEntry.eventType &&
+        last.connectionState === nextEntry.connectionState
+      ) {
+        return [
+          ...prev.slice(0, -1),
+          { ...last, occurredAt: nextEntry.occurredAt },
+        ];
+      }
+
+      return [...prev, nextEntry].slice(-TASK_EVENT_LOG_LIMIT);
+    });
+  }, []);
+
   useEffect(() => {
     if (!currentSessionId || !currentTaskId) {
       return;
@@ -634,6 +714,34 @@ export function ZhiHuiPage() {
       .filter((image): image is ConversationImage => image !== null);
   };
 
+  const mergeConversationImages = (
+    base: ConversationImage[] | undefined,
+    incoming: ConversationImage[]
+  ) => {
+    if (incoming.length === 0) {
+      return base;
+    }
+
+    const next = [...(base || [])];
+    incoming.forEach(image => {
+      const matchIndex = next.findIndex(existing =>
+        (image.recordId && existing.recordId === image.recordId) ||
+        (image.fileId && existing.fileId === image.fileId)
+      );
+
+      if (matchIndex >= 0) {
+        next[matchIndex] = {
+          ...next[matchIndex],
+          ...image,
+        };
+      } else {
+        next.push(image);
+      }
+    });
+
+    return next;
+  };
+
   const formatTaskStatus = (status?: string | null) =>
     status ? TASK_STATUS_LABELS[status] || status : '';
 
@@ -648,11 +756,141 @@ export function ZhiHuiPage() {
     return message ? `${CONNECTION_STATE_LABELS[state]} · ${message}` : CONNECTION_STATE_LABELS[state];
   };
 
+  const formatEventCursor = (cursor?: string | null) => {
+    if (!cursor) return '';
+    return cursor.length > 20
+      ? `${cursor.slice(0, 8)}...${cursor.slice(-8)}`
+      : cursor;
+  };
+
   const formatEstimatedWait = (estimatedWaitMs?: number | null) => {
     if (estimatedWaitMs == null) return '';
     if (estimatedWaitMs < 1000) return `${estimatedWaitMs} ms`;
     if (estimatedWaitMs < 60000) return `${Math.ceil(estimatedWaitMs / 1000)} 秒`;
     return `${Math.ceil(estimatedWaitMs / 60000)} 分钟`;
+  };
+
+  const formatEventLogTime = (time: number) =>
+    new Date(time).toLocaleTimeString('zh', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+
+  const describeTaskEvent = (msg: SSEMessage) => {
+    switch (msg.type) {
+      case 'heartbeat':
+        return null;
+      case 'message.delta':
+        if (runtimeRef.current.lastEventType === 'message.delta') {
+          return null;
+        }
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: '正在持续回传文本内容',
+        };
+      case 'queue.updated': {
+        const detail = [
+          msg.position != null ? `前方 ${msg.position} 个任务` : null,
+          msg.estimatedWaitMs != null ? `预计 ${formatEstimatedWait(msg.estimatedWaitMs)}` : null,
+        ].filter((item): item is string => Boolean(item)).join(' · ');
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: detail || '任务已进入调度队列',
+        };
+      }
+      case 'task.phase':
+        return {
+          title: formatTaskPhase(msg.phase) || TASK_EVENT_LABELS[msg.type],
+          detail: msg.requestId ? `请求编号 ${msg.requestId}` : undefined,
+        };
+      case 'message.completed':
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: msg.finishReason ? `结束原因：${msg.finishReason}` : '文本输出已结束',
+        };
+      case 'artifact.pending': {
+        const pendingCount = Array.from(
+          new Set([
+            ...(msg.recordIds || []),
+            msg.recordId,
+          ].filter((value): value is string => Boolean(value)))
+        ).length;
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: pendingCount > 0
+            ? `已提交 ${pendingCount} 个图片生成记录`
+            : msg.promptSummary || '等待图片服务回调',
+        };
+      }
+      case 'artifact.ready': {
+        const imageCount = [
+          ...(msg.image ? [msg.image] : []),
+          ...(Array.isArray(msg.images) ? msg.images : []),
+        ].length;
+        const fileCount = Array.from(
+          new Set(
+            (Array.isArray(msg.fileIds) && msg.fileIds.length > 0
+              ? msg.fileIds
+              : msg.fileId
+                ? [msg.fileId]
+                : []
+            ).filter((value): value is string => Boolean(value))
+          )
+        ).length;
+        const count = Math.max(msg.totalCount || 0, imageCount, fileCount);
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: count > 0 ? `已返回 ${count} 张图片` : '图片结果已可查看',
+        };
+      }
+      case 'artifact.failed':
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: msg.message || msg.errorMessage || msg.code || '图片生成未成功',
+        };
+      case 'artifact.metadata.completed':
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: '图片元数据已补齐',
+        };
+      case 'task.completed':
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: '本轮创作已完成',
+        };
+      case 'task.failed':
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: msg.message || msg.errorMessage || '任务执行失败',
+        };
+      case 'task.rejected':
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: msg.displayText || '内容审核未通过',
+        };
+      case 'task.cancelled':
+        return {
+          title: TASK_EVENT_LABELS[msg.type],
+          detail: msg.reason || '任务已取消',
+        };
+      default:
+        return null;
+    }
+  };
+
+  const describeConnectionEvent = (event: SSEConnectionEvent) => {
+    const detail = [
+      event.message || null,
+      event.retryInMs != null ? `${Math.ceil(event.retryInMs / 1000)} 秒后继续` : null,
+      event.lastEventId ? `游标 ${formatEventCursor(event.lastEventId)}` : null,
+      event.state === 'connected' && event.attempt > 1 ? '已恢复续传' : null,
+    ].filter((item): item is string => Boolean(item)).join(' · ');
+
+    return {
+      title: CONNECTION_STATE_LABELS[event.state],
+      detail: detail || undefined,
+    };
   };
 
   const buildPatternFromImage = (
@@ -746,11 +984,15 @@ export function ZhiHuiPage() {
   });
 
   const getPatternAliases = (
-    pattern: Pick<GeneratedPattern, 'id' | 'requestId' | 'recordId' | 'fileId'>
+    pattern: Pick<GeneratedPattern, 'id' | 'recordId' | 'fileId'>
   ) =>
-    [pattern.id, pattern.requestId, pattern.recordId, pattern.fileId].filter(
+    [pattern.id, pattern.recordId, pattern.fileId].filter(
       (value): value is string => Boolean(value)
     );
+
+  const hasConcretePatternIdentity = (
+    pattern: Pick<GeneratedPattern, 'recordId' | 'fileId'>
+  ) => Boolean(pattern.recordId || pattern.fileId);
 
   const mergePatternCollections = (base: GeneratedPattern[], incoming: GeneratedPattern[]) => {
     if (incoming.length === 0) return base;
@@ -763,7 +1005,9 @@ export function ZhiHuiPage() {
           return true;
         }
         if (item.requestId && existing.requestId === item.requestId) {
-          return existing.status !== 'ready';
+          const existingIsGeneric = !hasConcretePatternIdentity(existing);
+          const incomingIsGeneric = !hasConcretePatternIdentity(item);
+          return existingIsGeneric || incomingIsGeneric;
         }
         return false;
       });
@@ -828,11 +1072,54 @@ export function ZhiHuiPage() {
 
   const isTerminalState = (state: GenState) => TERMINAL_TASK_STATES.has(state);
 
-  const applyAssistantText = (messageId: string | null, nextText: string) => {
+  const buildAssistantPlaceholderMessage = (
+    messageId: string,
+    options: { taskId?: string | null; timestamp?: string | number | Date | null } = {}
+  ): ConvMessage => ({
+    id: messageId,
+    role: 'system',
+    content: '',
+    timestamp: formatMessageTime(options.timestamp),
+    taskId: options.taskId || undefined,
+    assistantMessageId: messageId,
+  });
+
+  const upsertAssistantMessage = (
+    messageId: string | null,
+    updater: (message: ConvMessage) => ConvMessage,
+    options: { taskId?: string | null; timestamp?: string | number | Date | null } = {}
+  ) => {
     if (!messageId) return;
-    setMessages(prev => prev.map(message =>
-      message.id === messageId ? { ...message, content: nextText } : message
-    ));
+    setMessages(prev => {
+      const matchIndex = prev.findIndex(message => message.id === messageId);
+      if (matchIndex === -1) {
+        return [...prev, updater(buildAssistantPlaceholderMessage(messageId, options))];
+      }
+
+      return prev.map(message =>
+        message.id === messageId ? updater(message) : message
+      );
+    });
+  };
+
+  const applyAssistantText = (
+    messageId: string | null,
+    nextText: string,
+    options: { taskId?: string | null; timestamp?: string | number | Date | null } = {}
+  ) => {
+    upsertAssistantMessage(
+      messageId,
+      message => ({ ...message, content: nextText }),
+      options
+    );
+  };
+
+  const patchAssistantMessage = (
+    messageId: string | null,
+    updater: (message: ConvMessage) => ConvMessage,
+    options: { taskId?: string | null; timestamp?: string | number | Date | null } = {}
+  ) => {
+    upsertAssistantMessage(messageId, updater, options);
   };
 
   const extractPatternsFromImages = (
@@ -887,13 +1174,13 @@ export function ZhiHuiPage() {
       }
 
       if (artifactStatus === 'ready') {
-        if (fileIds.length > 0) {
+        if ((!message.images || message.images.length === 0) && fileIds.length > 0) {
           nextPatterns.push(
             ...fileIds.map(fileId => buildPatternFromFileId(fileId, {
               title,
               desc,
               requestId: requestId || undefined,
-              recordId: recordId || undefined,
+              recordId: fileIds.length === 1 ? recordId || undefined : undefined,
               tags,
             }))
           );
@@ -907,7 +1194,7 @@ export function ZhiHuiPage() {
             title,
             desc: desc || '图片正在生成，完成后会自动替换为成图',
             tags,
-            recordId: itemId,
+            recordId: requestId && itemId === requestId ? undefined : itemId,
           }))
         );
       }
@@ -919,7 +1206,7 @@ export function ZhiHuiPage() {
             title,
             desc: desc || '图片生成未成功，可重新发起生成。',
             tags,
-            recordId: itemId,
+            recordId: requestId && itemId === requestId ? undefined : itemId,
           }))
         );
       }
@@ -927,12 +1214,19 @@ export function ZhiHuiPage() {
     return nextPatterns;
   };
 
-  const resolveLatestAssistantMessageId = (conversation: ConvMessage[]) => {
+  const resolveLatestAssistantMessageId = (
+    conversation: ConvMessage[],
+    taskId?: string | null
+  ) => {
     for (let index = conversation.length - 1; index >= 0; index -= 1) {
       const message = conversation[index];
-      if (message.role === 'system') {
-        return message.id;
+      if (message.role !== 'system') {
+        continue;
       }
+      if (taskId && message.taskId !== taskId) {
+        continue;
+      }
+      return message.id;
     }
     return null;
   };
@@ -975,7 +1269,10 @@ export function ZhiHuiPage() {
       assistantIdHint || assistantMsgIdRef.current || snapshot.assistantMessageId || null;
     const nextAssistantText = snapshot.assistantText || snapshot.artifact?.promptSummary || '';
     if (nextAssistantText) {
-      applyAssistantText(targetAssistantId, nextAssistantText);
+      applyAssistantText(targetAssistantId, nextAssistantText, {
+        taskId: snapshot.taskId,
+        timestamp: Date.now(),
+      });
     }
 
     patchRuntime({
@@ -1035,18 +1332,46 @@ export function ZhiHuiPage() {
           requestId,
         }
       );
+
+      const snapshotImages = normalizeSseImages(
+        artifactRecords.map(record => ({
+          recordId: record.recordId,
+          fileId: record.fileId,
+          title: record.title,
+          description: record.description,
+          tags: record.tags,
+          width: record.width,
+          height: record.height,
+        }))
+      );
+
+      patchAssistantMessage(
+        targetAssistantId,
+        message => ({
+          ...message,
+          requestId,
+          recordId: artifactRecords[0]?.recordId || message.recordId,
+          recordIds: artifactRecordIds.length > 0 ? artifactRecordIds : message.recordIds,
+          artifactStatus: artifact.status,
+          images: mergeConversationImages(message.images, snapshotImages),
+        }),
+        { taskId: snapshot.taskId }
+      );
+
       if (artifactStatus === 'ready') {
         const readyPatterns = [
           ...recordImagePatterns,
-          ...artifactFileIds.map(fileId =>
-            buildPatternFromFileId(fileId, {
-              title: artifact.promptSummary || nextAssistantText || '生成纹样',
-              desc: artifact.promptSummary || nextAssistantText || '',
-              tags: [selectedCategory],
-              requestId,
-              recordId: artifactRecords[0]?.recordId,
-            })
-          ),
+          ...(recordImagePatterns.length === 0
+            ? artifactFileIds.map(fileId =>
+                buildPatternFromFileId(fileId, {
+                  title: artifact.promptSummary || nextAssistantText || '生成纹样',
+                  desc: artifact.promptSummary || nextAssistantText || '',
+                  tags: [selectedCategory],
+                  requestId,
+                  recordId: artifactFileIds.length === 1 ? artifactRecords[0]?.recordId : undefined,
+                })
+              )
+            : []),
         ];
         if (readyPatterns.length > 0) {
           mergePatterns(readyPatterns);
@@ -1063,7 +1388,7 @@ export function ZhiHuiPage() {
               title: artifact.promptSummary || nextAssistantText || '纹样生成中',
               desc: artifact.promptSummary || nextAssistantText || '图片正在生成，完成后会自动替换为成图',
               tags: [selectedCategory],
-              recordId: itemId,
+              recordId: requestId && itemId === requestId ? undefined : itemId,
             })
           )
         );
@@ -1079,7 +1404,7 @@ export function ZhiHuiPage() {
               title: artifact.promptSummary || nextAssistantText || '纹样生成失败',
               desc: artifact.promptSummary || nextAssistantText || '图片生成未成功，可重新发起生成。',
               tags: [selectedCategory],
-              recordId: itemId,
+              recordId: requestId && itemId === requestId ? undefined : itemId,
               errorCode: snapshot.error?.code,
               errorMessage: snapshot.error?.message,
               retriable: snapshot.error?.retriable,
@@ -1139,7 +1464,34 @@ export function ZhiHuiPage() {
         runtimePatch.status = 'CANCELLED';
         break;
     }
+
+    const eventSummary = describeTaskEvent(msg);
+    if (eventSummary) {
+      const eventTime = msg.occurredAt ? Date.parse(msg.occurredAt) : NaN;
+      pushTaskEvent({
+        kind: 'event',
+        title: eventSummary.title,
+        detail: eventSummary.detail,
+        eventType: msg.type,
+        occurredAt: Number.isNaN(eventTime) ? Date.now() : eventTime,
+      });
+    }
+
     patchRuntime(runtimePatch);
+    patchAssistantMessage(
+      assistantId || null,
+      message => ({
+        ...message,
+        taskId: msg.taskId || message.taskId,
+        assistantMessageId: assistantId || message.assistantMessageId,
+        lastEventId: streamCursor || message.lastEventId,
+        lastEventSeq: typeof msg.seq === 'number' ? msg.seq : message.lastEventSeq,
+        status: runtimePatch.status || message.status,
+        phase: msg.phase || runtimePatch.phase || message.phase,
+        requestId: msg.requestId || message.requestId,
+      }),
+      { taskId: msg.taskId }
+    );
 
     const lifecycleState = mapLifecycleState({
       status: runtimePatch.status || previousRuntime.status,
@@ -1194,6 +1546,18 @@ export function ZhiHuiPage() {
               })
             )
           );
+
+          patchAssistantMessage(
+            assistantId || null,
+            message => ({
+              ...message,
+              requestId,
+              recordId: msg.recordId || message.recordId,
+              recordIds: pendingRecordIds.length > 0 ? pendingRecordIds : message.recordIds,
+              artifactStatus: 'PENDING',
+            }),
+            { taskId: msg.taskId }
+          );
         }
         break;
       case 'artifact.ready': {
@@ -1224,17 +1588,31 @@ export function ZhiHuiPage() {
           )
         );
 
-        const filePatterns = fileIds.map(fileId =>
-          buildPatternFromFileId(fileId, {
-            title: msg.promptSummary || '生成纹样',
-            desc: msg.promptSummary || '',
-            tags: [selectedCategory],
-            requestId,
-            recordId: msg.recordId,
-          })
-        );
+        const filePatterns = artifactImages.length === 0
+          ? fileIds.map(fileId =>
+              buildPatternFromFileId(fileId, {
+                title: msg.promptSummary || '生成纹样',
+                desc: msg.promptSummary || '',
+                tags: [selectedCategory],
+                requestId,
+                recordId: fileIds.length === 1 ? msg.recordId : undefined,
+              })
+            )
+          : [];
 
         mergePatterns([...imagePatterns, ...filePatterns]);
+        patchAssistantMessage(
+          assistantId || null,
+          message => ({
+            ...message,
+            requestId,
+            recordId: msg.recordId || message.recordId,
+            recordIds: msg.recordIds?.length ? msg.recordIds : message.recordIds,
+            artifactStatus: 'READY',
+            images: mergeConversationImages(message.images, artifactImages),
+          }),
+          { taskId: msg.taskId }
+        );
         setGenState('finalizing');
         break;
       }
@@ -1260,6 +1638,17 @@ export function ZhiHuiPage() {
               retriable: msg.retriable,
             })
           )
+        );
+        patchAssistantMessage(
+          assistantId || null,
+          message => ({
+            ...message,
+            requestId,
+            recordId: msg.recordId || message.recordId,
+            recordIds: failedRecordIds.length > 0 ? failedRecordIds : message.recordIds,
+            artifactStatus: 'FAILED',
+          }),
+          { taskId: msg.taskId }
         );
         setGenState('failed');
         break;
@@ -1342,6 +1731,7 @@ export function ZhiHuiPage() {
     setAssistantMsgId(null);
     updateLastEventId(null);
     resetRuntime();
+    clearTaskEventLog();
     setIsStreaming(false);
   };
 
@@ -1377,6 +1767,13 @@ export function ZhiHuiPage() {
       {
         lastEventId: resumeLastEventId || lastEventIdRef.current || undefined,
         onStatus: (event) => {
+          const connectionSummary = describeConnectionEvent(event);
+          pushTaskEvent({
+            kind: 'connection',
+            title: connectionSummary.title,
+            detail: connectionSummary.detail,
+            connectionState: event.state,
+          });
           patchRuntime({
             connectionState: event.state,
             connectionMessage: event.message ?? null,
@@ -1389,6 +1786,13 @@ export function ZhiHuiPage() {
           }
         },
         onError: (event) => {
+          const connectionSummary = describeConnectionEvent(event);
+          pushTaskEvent({
+            kind: 'connection',
+            title: connectionSummary.title,
+            detail: connectionSummary.detail,
+            connectionState: 'error',
+          });
           patchRuntime({
             connectionState: 'error',
             connectionMessage: event.message ?? null,
@@ -1507,6 +1911,12 @@ export function ZhiHuiPage() {
       }
 
       const latestAssistantId = resolveLatestAssistantMessageId(msgs);
+      const taskAssistantId = persistedTask?.taskId
+        ? resolveLatestAssistantMessageId(msgs, persistedTask.taskId)
+        : null;
+      const activeAssistantId = persistedTask?.taskId && shouldReplayTask(persistedTask.status)
+        ? persistedTask.assistantMessageId || taskAssistantId || null
+        : latestAssistantId || persistedTask?.assistantMessageId || null;
       setMessages(msgs);
       setPatterns(
         mergePatternCollections(
@@ -1514,7 +1924,7 @@ export function ZhiHuiPage() {
           extractPatternsFromConversation(msgs)
         )
       );
-      setAssistantMsgId(latestAssistantId || persistedTask?.assistantMessageId || null);
+      setAssistantMsgId(activeAssistantId);
 
       if (!persistedTask?.taskId) {
         setGenState('idle');
@@ -1547,7 +1957,7 @@ export function ZhiHuiPage() {
       try {
         const recovery = await syncTaskSnapshot(
           persistedTask.taskId,
-          latestAssistantId || persistedTask.assistantMessageId
+          activeAssistantId
         );
         if (sessionLoadVersionRef.current !== loadVersion) {
           return;
@@ -1762,6 +2172,15 @@ export function ZhiHuiPage() {
         requestId: null,
         patterns: [],
       });
+      pushTaskEvent({
+        kind: 'event',
+        title: formatTaskPhase(res.data.phase) || '任务已创建',
+        detail: [
+          formatTaskStatus(res.data.status),
+          res.data.queuePosition != null ? `前方 ${res.data.queuePosition} 个任务` : null,
+          res.data.estimatedWaitMs != null ? `预计 ${formatEstimatedWait(res.data.estimatedWaitMs)}` : null,
+        ].filter((item): item is string => Boolean(item)).join(' · '),
+      });
       setGenState(mapLifecycleState({ status: res.data.status, phase: res.data.phase }));
       clearComposerAttachments();
 
@@ -1832,28 +2251,27 @@ export function ZhiHuiPage() {
 
   const isGenerating = genState !== 'idle' && !isTerminalState(genState);
   const showTerminalStatus = genState !== 'idle' && isTerminalState(genState);
+  const showStatusText = isGenerating || showTerminalStatus;
   const taskStatusText = genState !== 'idle' ? TASK_STAGE_COPY[genState] : '';
-  const progressState = (genState === 'cancelRequested'
-    ? mapLifecycleState({ phase: runtime.phase })
-    : ACTIVE_TASK_STEPS.includes(genState as (typeof ACTIVE_TASK_STEPS)[number])
-      ? genState
-      : mapLifecycleState({
-          phase: runtime.phase,
-          status: runtime.status === 'CANCEL_REQUESTED' ? null : runtime.status,
-        })) as (typeof ACTIVE_TASK_STEPS)[number];
-  const activeTaskIndex = Math.max(ACTIVE_TASK_STEPS.indexOf(progressState), 0);
-  const runtimeDetailLines = [
-    runtime.status ? `任务状态：${formatTaskStatus(runtime.status)}` : null,
-    runtime.phase ? `当前阶段：${formatTaskPhase(runtime.phase)}` : null,
-    runtime.queuePosition !== null || runtime.estimatedWaitMs !== null
-      ? `队列信息：${runtime.queuePosition != null ? `前方 ${runtime.queuePosition} 个` : '已出队'}${runtime.estimatedWaitMs != null ? ` · 预计 ${formatEstimatedWait(runtime.estimatedWaitMs)}` : ''}`
-      : null,
-    runtime.lastEventType ? `最新事件：${formatTaskEvent(runtime.lastEventType)}` : null,
-    runtime.connectionState && runtime.connectionState !== 'connected'
-      ? `连接状态：${formatConnectionState(runtime.connectionState, runtime.connectionMessage)}`
-      : null,
-  ].filter((line): line is string => Boolean(line));
-
+  const taskStatusHint = isGenerating
+    ? [
+        runtime.queuePosition != null ? `前方 ${runtime.queuePosition} 个任务` : null,
+        runtime.connectionState && runtime.connectionState !== 'connected'
+          ? formatConnectionState(runtime.connectionState, runtime.connectionMessage)
+          : null,
+      ].filter((item): item is string => Boolean(item)).join(' · ')
+    : '';
+  const taskStatusLine = [
+    taskStatusText,
+    taskStatusHint || null,
+  ].filter((item): item is string => Boolean(item)).join(' · ');
+  const taskStatusTone = showTerminalStatus
+    ? genState === 'done'
+      ? '#0d9488'
+      : genState === 'failed' || genState === 'rejected' || genState === 'cancelled'
+        ? '#B23A3A'
+        : '#1A3D4A'
+    : '#1A3D4A';
   const sessionGroups = [
     { key: 'today' as const, label: '今日', items: sessions.filter(s => s.group === 'today') },
     { key: 'week'  as const, label: '本周', items: sessions.filter(s => s.group === 'week')  },
@@ -2031,71 +2449,27 @@ export function ZhiHuiPage() {
             </motion.div>
           ))}
 
-          {/* Task status */}
           <AnimatePresence>
-            {isGenerating && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }} className="mb-4 flex justify-start">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mr-2.5 mt-0.5"
+            {showStatusText && taskStatusLine && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="mb-4 flex items-start gap-2.5"
+              >
+                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
                   style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
                   <Sparkles className="w-3.5 h-3.5 text-[#C4912A]" />
                 </div>
-                <div className="px-4 py-3 rounded-2xl rounded-tl-sm text-sm"
-                  style={{ background: 'white', border: '1px solid rgba(196,145,42,0.12)' }}>
-                  <div className="flex items-center gap-2 text-[#1A3D4A]">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C4912A]" />
-                    {taskStatusText}
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    {ACTIVE_TASK_STEPS.map((step, i) => {
-                      const isPast = i < activeTaskIndex;
-                      const isCurrent = i === activeTaskIndex;
-                      return (
-                        <div key={step} className="flex items-center gap-2 text-xs">
-                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                            isPast ? 'bg-[#C4912A]' : isCurrent ? 'bg-[#C4912A] animate-pulse' : 'bg-[rgba(26,61,74,0.12)]'
-                          }`} />
-                          <span className={isPast || isCurrent ? 'text-[#1A3D4A]' : 'text-[#9B9590]'}>
-                            {TASK_STAGE_LABELS[step]}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {runtimeDetailLines.length > 0 && (
-                    <div className="mt-3 space-y-1.5 border-t border-[rgba(26,61,74,0.08)] pt-3">
-                      {runtimeDetailLines.map(line => (
-                        <div key={line} className="text-[11px] text-[#6B6558] leading-relaxed">
-                          {line}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-            {showTerminalStatus && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                className="mb-4 flex justify-start">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mr-2.5 mt-0.5"
-                  style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
-                  <Sparkles className="w-3.5 h-3.5 text-[#C4912A]" />
-                </div>
-                <div className="px-4 py-3 rounded-2xl rounded-tl-sm text-sm"
-                  style={{ background: 'white', border: '1px solid rgba(196,145,42,0.12)' }}>
-                  <div className="flex items-center gap-2 text-[#1A3D4A]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#C4912A]" />
-                    {taskStatusText}
-                  </div>
-                  {runtimeDetailLines.length > 0 && (
-                    <div className="mt-3 space-y-1.5 border-t border-[rgba(26,61,74,0.08)] pt-3">
-                      {runtimeDetailLines.map(line => (
-                        <div key={line} className="text-[11px] text-[#6B6558] leading-relaxed">
-                          {line}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="pt-1 text-sm leading-relaxed" style={{ color: taskStatusTone }}>
+                  <span className="inline-flex items-center gap-2">
+                    {isGenerating ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C4912A]" />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                    )}
+                    <span>{taskStatusLine}</span>
+                  </span>
                 </div>
               </motion.div>
             )}
@@ -2109,7 +2483,7 @@ export function ZhiHuiPage() {
                   {patterns.length} 个创作方向 · 点击图片查看大图
                 </p>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 items-start">
                   {patterns.map((pattern, i) => {
                     const isReady = pattern.status === 'ready';
                     const isPending = pattern.status === 'pending';
@@ -2143,7 +2517,7 @@ export function ZhiHuiPage() {
                         <div className="relative overflow-hidden" style={{ paddingBottom: '76%' }}>
                           {isReady ? (
                             <>
-                              <img
+                              <ProtectedImage
                                 src={pattern.imageUrl}
                                 alt={pattern.title}
                                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 cursor-pointer"
@@ -2151,8 +2525,10 @@ export function ZhiHuiPage() {
                               />
                               <div className="absolute inset-0"
                                 style={{ background: 'linear-gradient(to top, rgba(11,20,30,0.72) 0%, rgba(11,20,30,0.05) 42%, transparent 100%)' }} />
-                              <div
-                                className="absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                              <button
+                                type="button"
+                                onClick={() => setZoomPattern(pattern)}
+                                className="absolute bottom-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full opacity-0 transition-all duration-200 group-hover:opacity-100"
                                 style={{
                                   background: 'rgba(255,255,255,0.18)',
                                   backdropFilter: 'blur(8px)',
@@ -2160,8 +2536,8 @@ export function ZhiHuiPage() {
                                 }}
                               >
                                 <ZoomIn className="w-3.5 h-3.5 text-white" />
-                              </div>
-                              <div className="absolute bottom-0 left-0 right-0 px-4 py-3.5">
+                              </button>
+                              <div className="pointer-events-none absolute bottom-0 left-0 right-0 px-4 py-3.5">
                                 <p className="text-white text-sm mb-2" style={{ fontWeight: 600, textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
                                   {pattern.title}
                                 </p>
@@ -2194,12 +2570,16 @@ export function ZhiHuiPage() {
                               <p className="text-sm mb-1" style={{ fontWeight: 600, color: isPending ? '#1A3D4A' : '#8B2020' }}>
                                 {PATTERN_STATUS_LABELS[pattern.status]}
                               </p>
-                              <p className="text-xs leading-relaxed" style={{ color: '#6B6558' }}>
-                                {pattern.title}
-                              </p>
-                              <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#9B9590' }}>
-                                {pattern.desc}
-                              </p>
+                              {!isPending && (
+                                <>
+                                  <p className="text-xs leading-relaxed" style={{ color: '#6B6558' }}>
+                                    {pattern.title}
+                                  </p>
+                                  <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#9B9590' }}>
+                                    {pattern.desc}
+                                  </p>
+                                </>
+                              )}
                               {isFailed && pattern.errorMessage && (
                                 <p className="text-[11px] mt-2 leading-relaxed" style={{ color: '#B23A3A' }}>
                                   {pattern.errorMessage}
@@ -2209,90 +2589,84 @@ export function ZhiHuiPage() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 px-4 py-3"
-                          style={{ background: 'linear-gradient(to right, #FDFAF5, #FBF7EE)', borderTop: '1px solid rgba(196,145,42,0.1)' }}>
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                            <span className="text-[10px] px-2 py-1 rounded-full flex-shrink-0"
-                              style={{
-                                background: isReady ? 'rgba(196,145,42,0.1)' : isPending ? 'rgba(196,145,42,0.08)' : 'rgba(180,60,60,0.08)',
-                                color: isReady ? '#B8821E' : isPending ? '#C4912A' : '#B23A3A',
-                              }}>
-                              {pattern.style}
-                            </span>
-                            <span className="text-[10px] text-[#9B9590] truncate">{pattern.scene}</span>
-                          </div>
-                          {isReady ? (
-                            <>
-                              <button
-                                onClick={e => { e.stopPropagation(); handleToggleSave(pattern); }}
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
-                                style={saved
-                                  ? { background: 'rgba(13,148,136,0.1)', color: '#0d9488', border: '1px solid rgba(13,148,136,0.25)' }
-                                  : { background: 'rgba(196,145,42,0.08)', color: '#B8821E', border: '1px solid rgba(196,145,42,0.22)' }
-                                }
-                                onMouseEnter={e => {
-                                  if (!saved) {
-                                    (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.16)';
-                                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.4)';
-                                  }
-                                }}
-                                onMouseLeave={e => {
-                                  if (!saved) {
-                                    (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.08)';
-                                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.22)';
-                                  }
+                        {!isPending && (
+                          <div className="flex items-center gap-2 px-4 py-3"
+                            style={{ background: 'linear-gradient(to right, #FDFAF5, #FBF7EE)', borderTop: '1px solid rgba(196,145,42,0.1)' }}>
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className="text-[11px] leading-5 text-[#6B6558]"
+                                style={{
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
                                 }}
                               >
-                                {saved
-                                  ? <><BookmarkCheck className="w-3 h-3" /> 已收录</>
-                                  : <><Bookmark className="w-3 h-3" /> 收录至我的纹库</>
-                                }
-                              </button>
+                                {pattern.desc}
+                              </p>
+                            </div>
+                            {isReady ? (
+                              <>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleToggleSave(pattern); }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
+                                  style={saved
+                                    ? { background: 'rgba(13,148,136,0.1)', color: '#0d9488', border: '1px solid rgba(13,148,136,0.25)' }
+                                    : { background: 'rgba(196,145,42,0.08)', color: '#B8821E', border: '1px solid rgba(196,145,42,0.22)' }
+                                  }
+                                  onMouseEnter={e => {
+                                    if (!saved) {
+                                      (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.16)';
+                                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.4)';
+                                    }
+                                  }}
+                                  onMouseLeave={e => {
+                                    if (!saved) {
+                                      (e.currentTarget as HTMLElement).style.background = 'rgba(196,145,42,0.08)';
+                                      (e.currentTarget as HTMLElement).style.borderColor = 'rgba(196,145,42,0.22)';
+                                    }
+                                  }}
+                                >
+                                  {saved
+                                    ? <><BookmarkCheck className="w-3 h-3" /> 已收录</>
+                                    : <><Bookmark className="w-3 h-3" /> 收录至我的纹库</>
+                                  }
+                                </button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
+                                  style={{
+                                    background: 'rgba(26,61,74,0.06)',
+                                    color: '#6B6558',
+                                    border: '1px solid rgba(26,61,74,0.1)',
+                                  }}
+                                  onMouseEnter={e => {
+                                    (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.1)';
+                                    (e.currentTarget as HTMLElement).style.color = '#1A3D4A';
+                                  }}
+                                  onMouseLeave={e => {
+                                    (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.06)';
+                                    (e.currentTarget as HTMLElement).style.color = '#6B6558';
+                                  }}
+                                >
+                                  <RotateCcw className="w-3 h-3" /> 再次生图
+                                </button>
+                              </>
+                            ) : (
                               <button
                                 onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
                                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
                                 style={{
-                                  background: 'rgba(26,61,74,0.06)',
-                                  color: '#6B6558',
-                                  border: '1px solid rgba(26,61,74,0.1)',
-                                }}
-                                onMouseEnter={e => {
-                                  (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.1)';
-                                  (e.currentTarget as HTMLElement).style.color = '#1A3D4A';
-                                }}
-                                onMouseLeave={e => {
-                                  (e.currentTarget as HTMLElement).style.background = 'rgba(26,61,74,0.06)';
-                                  (e.currentTarget as HTMLElement).style.color = '#6B6558';
+                                  background: 'rgba(180,60,60,0.08)',
+                                  color: '#8B2020',
+                                  border: '1px solid rgba(180,60,60,0.18)',
                                 }}
                               >
                                 <RotateCcw className="w-3 h-3" /> 再次生图
                               </button>
-                            </>
-                          ) : isFailed ? (
-                            <button
-                              onClick={e => { e.stopPropagation(); handleRegen(pattern); }}
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
-                              style={{
-                                background: 'rgba(180,60,60,0.08)',
-                                color: '#8B2020',
-                                border: '1px solid rgba(180,60,60,0.18)',
-                              }}
-                            >
-                              <RotateCcw className="w-3 h-3" /> 再次生图
-                            </button>
-                          ) : (
-                            <span
-                              className="text-[10px] px-2.5 py-1.5 rounded-full flex-shrink-0"
-                              style={{
-                                background: 'rgba(196,145,42,0.08)',
-                                color: '#C4912A',
-                                border: '1px solid rgba(196,145,42,0.18)',
-                              }}
-                            >
-                              等待回调
-                            </span>
-                          )}
-                        </div>
+                            )}
+                          </div>
+                        )}
                       </motion.div>
                     );
                   })}

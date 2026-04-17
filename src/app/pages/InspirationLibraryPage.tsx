@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 import type { MyPattern, CraftInfo, LicenseConfig } from '../context/AppContext';
+import { ProtectedImage } from '../components/ProtectedImage';
 import {
   Search, Upload, X, ZoomIn, ShieldCheck, Award, Globe, Globe2,
   Lock, Sparkles, Brain, FolderUp, ChevronRight, Check, Star,
@@ -61,7 +62,7 @@ function Lightbox({ src, title, onClose }: { src: string; title: string; onClose
       onClick={onClose}>
       <motion.div initial={{ scale: 0.88 }} animate={{ scale: 1 }} exit={{ scale: 0.88 }}
         className="relative max-w-2xl w-full" onClick={e => e.stopPropagation()}>
-        <img src={src} alt={title} className="w-full rounded-2xl shadow-2xl" style={{ maxHeight: '80vh', objectFit: 'contain' }} />
+        <ProtectedImage src={src} alt={title} className="w-full rounded-2xl shadow-2xl" style={{ maxHeight: '80vh', objectFit: 'contain' }} />
         <div className="absolute bottom-0 left-0 right-0 px-4 py-3 rounded-b-2xl"
           style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)' }}>
           <p className="text-white text-sm">{title}</p>
@@ -112,7 +113,7 @@ function CertificateModal({ pattern, userName, onClose }: { pattern: MyPattern; 
           <div className="px-6 py-4 space-y-3">
             {/* Pattern thumbnail + cert no */}
             <div className="flex gap-4 items-start">
-              <img src={pattern.imageUrl} alt={pattern.title}
+              <ProtectedImage src={pattern.imageUrl} alt={pattern.title}
                 className="w-20 h-20 object-cover rounded-xl flex-shrink-0"
                 style={{ border: '1.5px solid rgba(196,145,42,0.3)' }} />
               <div className="flex-1 min-w-0">
@@ -310,7 +311,7 @@ function LicensePublishModal({ pattern, onClose, onConfirm, isSellerReady, onOpe
 
                 {/* Pattern preview */}
                 <div className="flex gap-3 items-center p-3.5 rounded-xl" style={{ background: 'rgba(26,61,74,0.04)', border: '1px solid rgba(26,61,74,0.08)' }}>
-                  <img src={pattern.imageUrl} alt="" className="w-16 h-16 rounded-xl object-cover flex-shrink-0" style={{ border: '1px solid rgba(26,61,74,0.1)' }} />
+                  <ProtectedImage src={pattern.imageUrl} alt="" className="w-16 h-16 rounded-xl object-cover flex-shrink-0" style={{ border: '1px solid rgba(26,61,74,0.1)' }} />
                   <div>
                     <p className="text-sm text-[#1A3D4A]" style={{ fontWeight: 700 }}>{pattern.title}</p>
                     <p className="text-[11px] text-[#6B6558] mt-0.5">{pattern.category} · {pattern.style}</p>
@@ -1007,7 +1008,7 @@ function RightsWizard({ pattern, userName, onClose, onConfirmed }: {
             {step === 'info' && (
               <motion.div key="info" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} className="space-y-4">
                 <div className="flex gap-4 items-start p-4 rounded-2xl" style={{ background: 'rgba(26,61,74,0.04)', border: '1px solid rgba(26,61,74,0.08)' }}>
-                  <img src={pattern.imageUrl} alt={pattern.title} className="w-20 h-20 object-cover rounded-xl flex-shrink-0" style={{ border: '1px solid rgba(26,61,74,0.1)' }} />
+                  <ProtectedImage src={pattern.imageUrl} alt={pattern.title} className="w-20 h-20 object-cover rounded-xl flex-shrink-0" style={{ border: '1px solid rgba(26,61,74,0.1)' }} />
                   <div>
                     <p className="text-sm text-[#1A3D4A]" style={{ fontWeight: 600 }}>{pattern.title}</p>
                     <p className="text-xs text-[#6B6558] mt-0.5">{pattern.category ?? '—'} · {pattern.style ?? '—'}</p>
@@ -1655,7 +1656,7 @@ function PatternCard({ pattern, userName, onZoom, onRights, onCert, onPublish, o
       style={{ border: '1px solid rgba(26,61,74,0.08)', boxShadow: '0 2px 12px rgba(26,61,74,0.06)' }}>
       {/* Image */}
       <div className="relative overflow-hidden" style={{ paddingBottom: '66%' }}>
-        <img src={pattern.imageUrl} alt={pattern.title}
+        <ProtectedImage src={pattern.imageUrl} alt={pattern.title}
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
         {/* Overlay on hover */}
         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -2050,7 +2051,7 @@ function CopyrightProgressModal({ pattern, onClose, onCancel }: {
         <div className="p-5 space-y-4">
           {/* Pattern info */}
           <div className="flex gap-3 items-center p-3 rounded-xl" style={{ background: 'rgba(26,61,74,0.04)', border: '1px solid rgba(26,61,74,0.07)' }}>
-            <img src={pattern.imageUrl} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+            <ProtectedImage src={pattern.imageUrl} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
             <div>
               <p className="text-sm text-[#1A3D4A]" style={{ fontWeight: 600 }}>{pattern.title}</p>
               <p className="text-[10px] text-[#9B9590] mt-0.5">认证单号：{pattern.certNo ?? '—'}</p>
