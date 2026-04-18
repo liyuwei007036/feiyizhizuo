@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { readAuthSession, subscribeAuthSession } from '../services/authSession';
+import { patternService } from '../services/patternService';
 
 export type Language = 'zh' | 'en';
 export type UserRole = 'designer' | 'admin';
@@ -72,8 +74,10 @@ export interface MyPattern {
   tags: string[];
   imageUrl: string;
   savedAt: string;
-  source: 'zhihui' | 'copilot' | 'upload';
+  source: 'zhihui' | 'copilot' | 'upload' | 'licensed';
   sourceLabel: string;
+  coverFileId?: string;
+  sourceBizId?: string;
 
   // Classification fields (通用分类字段)
   category?: string;    // 品类: 云锦/宋锦/蜀锦/苏绣/木雕/陶瓷...
@@ -90,17 +94,25 @@ export interface MyPattern {
   // Copyright certification (版权认证)
   copyrightStatus: 'none' | 'applied' | 'done';
   copyrightCertNo?: string;
+  copyrightCertFileId?: string;
   copyrightDoneAt?: string;
   copyrightCertImageUrl?: string; // 用户上传的国家版权局证书图片（自有证书）
   hasCopyrightCert?: boolean;     // 上传时是否已持有版权证书
 
   // Marketplace publication (纹样市集发布)
   published: boolean;
+  listingStatus?: 'unpublished' | 'published';
   price?: string;       // 发布定价 (元/授权)
   publishedAt?: string;
 
   // Craft info (filled during rights confirmation)
   craftInfo?: CraftInfo;
+  canDelete?: boolean;
+  canPublish?: boolean;
+  canApplyCopyright?: boolean;
+  canConfirmRights?: boolean;
+  canUnpublish?: boolean;
+  canSyncCopyrightCert?: boolean;
 }
 
 // Backward-compatible alias for ZhiHuiPage
@@ -322,6 +334,8 @@ interface AppContextType {
   setUserName: (name: string) => void;
   // 我的纹样
   myPatterns: MyPattern[];
+  myPatternsLoading: boolean;
+  reloadMyPatterns: () => Promise<MyPattern[]>;
   addMyPattern: (pattern: MyPattern) => void;
   updateMyPattern: (id: string, patch: Partial<MyPattern>) => void;
   removeMyPattern: (id: string) => void;
@@ -369,6 +383,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [userPhone, setUserPhone] = useState('13800000001');
   const [userName, setUserName] = useState('张三');
   const [myPatterns, setMyPatterns] = useState<MyPattern[]>(INITIAL_MY_PATTERNS);
+  const [myPatternsLoading, setMyPatternsLoading] = useState(false);
   const [persistentClients, setPersistentClients] = useState<CopilotClient[]>(INITIAL_CLIENTS);
   const [copilotProposals, setCopilotProposals] = useState<CopilotProposal[]>(INITIAL_PROPOSALS);
   const [redDots, setRedDotsState] = useState<Record<string, number>>({
@@ -419,6 +434,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return hasPermission(module, 'view');
   }, [hasPermission]);
 
+  const reloadMyPatterns = useCallback(async () => {
+    const session = readAuthSession();
+    if (!session.accessToken && !session.refreshToken) {
+      setMyPatterns([]);
+      return [];
+    }
+
+    setMyPatternsLoading(true);
+    try {
+      const page = await patternService.pagePatterns({ pageNum: 1, pageSize: 200 });
+      setMyPatterns(page.records);
+      return page.records;
+    } finally {
+      setMyPatternsLoading(false);
+    }
+  }, []);
+
   const addMyPattern = useCallback((pattern: MyPattern) => {
     setMyPatterns(prev => {
       if (prev.some(p => p.id === pattern.id)) return prev;
@@ -434,6 +466,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const removeMyPattern = useCallback((id: string) => {
     setMyPatterns(prev => prev.filter(p => p.id !== id));
   }, []);
+
+  useEffect(() => {
+    const snapshot = readAuthSession();
+    if (snapshot.accessToken || snapshot.refreshToken) {
+      void reloadMyPatterns().catch(() => {});
+    }
+
+    return subscribeAuthSession(nextSnapshot => {
+      if (nextSnapshot.accessToken || nextSnapshot.refreshToken) {
+        void reloadMyPatterns().catch(() => {});
+        return;
+      }
+      setMyPatterns([]);
+      setMyPatternsLoading(false);
+    });
+  }, [reloadMyPatterns]);
 
   const addCopilotProposal = useCallback((proposal: CopilotProposal) => {
     setCopilotProposals(prev => {
@@ -486,7 +534,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       userAvatar, setUserAvatar,
       userPhone, setUserPhone,
       userName, setUserName,
-      myPatterns, addMyPattern, updateMyPattern, removeMyPattern,
+      myPatterns, myPatternsLoading, reloadMyPatterns, addMyPattern, updateMyPattern, removeMyPattern,
       savedLibraryPatterns: myPatterns,
       addLibraryPattern: addMyPattern,
       removeLibraryPattern: removeMyPattern,

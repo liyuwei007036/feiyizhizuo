@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router';
 import { useApp } from '../context/AppContext';
-import type { MyPattern } from '../context/AppContext';
 import { toast } from 'sonner';
 import {
   Plus, Send, Sparkles, X, RotateCcw, Loader2, Clock,
@@ -17,6 +16,7 @@ import {
   type SSEMessage,
 } from '../services/chatService';
 import { uploadChatImage } from '../services/uploadService';
+import { patternService } from '../services/patternService';
 import { ProtectedImage } from '../components/ProtectedImage';
 
 const CATEGORIES = [
@@ -511,7 +511,7 @@ const shouldClearPersistedTask = (status?: string | null) =>
   normalizeTaskStatus(status) === 'COMPLETED';
 
 export function ZhiHuiPage() {
-  const { t, clearRedDot, addLibraryPattern, removeLibraryPattern, savedLibraryPatterns } = useApp();
+  const { t, clearRedDot, savedLibraryPatterns, reloadMyPatterns } = useApp();
   const navigate = useNavigate();
   const selectedCategory = DEFAULT_CATEGORY.name;
   const [inputValue, setInputValue] = useState('');
@@ -1994,37 +1994,55 @@ export function ZhiHuiPage() {
     };
   }, []);
 
-  const isSavedGlobally = (id: string) => savedLibraryPatterns.some(p => p.id === id);
+  useEffect(() => {
+    void reloadMyPatterns().catch(() => {});
+  }, [reloadMyPatterns]);
 
-  const handleToggleSave = (pattern: GeneratedPattern) => {
+  const findSavedPattern = (pattern: GeneratedPattern) =>
+    savedLibraryPatterns.find(saved => {
+      if (pattern.fileId && saved.coverFileId === pattern.fileId) {
+        return true;
+      }
+      if (pattern.recordId && saved.sourceBizId === pattern.recordId) {
+        return true;
+      }
+      return saved.id === pattern.id;
+    });
+
+  const isSavedGlobally = (pattern: GeneratedPattern) => Boolean(findSavedPattern(pattern));
+
+  const handleToggleSave = async (pattern: GeneratedPattern) => {
     if (pattern.status !== 'ready') {
       return;
     }
-    if (isSavedGlobally(pattern.id)) {
-      removeLibraryPattern(pattern.id);
+
+    const savedPattern = findSavedPattern(pattern);
+    if (savedPattern) {
+      await patternService.deletePattern(savedPattern.id);
+      await reloadMyPatterns();
       toast.info(`已从我的纹样移除「${pattern.title}」`);
-    } else {
-      const now = new Date().toLocaleString('zh', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit',
-      }).replace(/\//g, '-');
-      const entry: MyPattern = {
-        id: pattern.id, title: pattern.title, desc: pattern.desc,
-        tags: pattern.tags, imageUrl: pattern.imageUrl,
-        savedAt: now, createdAt: now,
-        source: 'zhihui', sourceLabel: '智绘AI',
-        category: selectedCategory,
-        style: '', material: '', colorTone: '',
-        rightsStatus: 'none',
-        copyrightStatus: 'none',
-        published: false,
-      };
-      addLibraryPattern(entry);
-      toast.success(`「${pattern.title}」已收录至我的纹样`, {
-        description: '可前往「我的纹样」发起确权',
-        action: { label: '前往纹样', onClick: () => navigate('/materials') },
-      });
+      return;
     }
+
+    if (!pattern.requestId || !pattern.fileId) {
+      toast.error('当前纹样缺少入库所需的请求信息，请重新生成后再试');
+      return;
+    }
+
+    await patternService.createFromAi({
+      requestId: pattern.requestId,
+      title: pattern.title,
+      description: pattern.desc,
+      coverFileId: pattern.fileId,
+      category: selectedCategory,
+      style: pattern.style && pattern.style !== 'AI生成' ? pattern.style : undefined,
+      tags: pattern.tags,
+    });
+    await reloadMyPatterns();
+    toast.success(`「${pattern.title}」已收录至我的纹样`, {
+      description: '可前往「我的纹样」发起确权',
+      action: { label: '前往纹样', onClick: () => navigate('/materials') },
+    });
   };
 
   // 会话切换需要防止旧请求回写，所以用递增版本号拦截陈旧响应。
@@ -2394,7 +2412,7 @@ export function ZhiHuiPage() {
           const isReady = pattern.status === 'ready';
           const isPending = pattern.status === 'pending';
           const isFailed = pattern.status === 'failed';
-          const saved = isReady && isSavedGlobally(pattern.id);
+          const saved = isReady && isSavedGlobally(pattern);
           const cardBorder = isReady
             ? (saved ? '2px solid rgba(13,148,136,0.45)' : '1px solid rgba(196,145,42,0.12)')
             : isPending
@@ -2515,7 +2533,7 @@ export function ZhiHuiPage() {
                   {isReady ? (
                     <>
                       <button
-                        onClick={e => { e.stopPropagation(); handleToggleSave(pattern); }}
+                        onClick={e => { e.stopPropagation(); void handleToggleSave(pattern); }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[10px] transition-all flex-shrink-0"
                         style={saved
                           ? { background: 'rgba(13,148,136,0.1)', color: '#0d9488', border: '1px solid rgba(13,148,136,0.25)' }
@@ -3009,8 +3027,8 @@ export function ZhiHuiPage() {
         {zoomPattern && (
           <ImageZoomModal
             pattern={zoomPattern}
-            isSaved={isSavedGlobally(zoomPattern.id)}
-            onToggleSave={() => handleToggleSave(zoomPattern)}
+            isSaved={isSavedGlobally(zoomPattern)}
+            onToggleSave={() => { void handleToggleSave(zoomPattern); }}
             onRegen={() => handleRegen(zoomPattern)}
             onClose={() => setZoomPattern(null)}
           />

@@ -3,7 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 import type { MyPattern, CraftInfo, LicenseConfig } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { ProtectedImage } from '../components/ProtectedImage';
+import { uploadFile } from '../services/uploadService';
+import { patternService } from '../services/patternService';
 import {
   Search, Upload, X, ZoomIn, ShieldCheck, Award, Globe, Globe2,
   Lock, Sparkles, Brain, FolderUp, ChevronRight, Check, Star,
@@ -29,6 +32,7 @@ const SOURCE_CONFIG: Record<string, { label: string; labelEn: string; color: str
   zhihui:  { label: '智绘AI',   labelEn: 'ZhiHui AI',      color: '#C4912A', bg: 'rgba(196,145,42,0.12)', icon: <Sparkles className="w-2.5 h-2.5" /> },
   copilot: { label: '设计提案', labelEn: 'Design Proposal', color: '#1A3D4A', bg: 'rgba(26,61,74,0.10)',  icon: <Brain className="w-2.5 h-2.5" /> },
   upload:  { label: '自有上传', labelEn: 'Uploaded',        color: '#6B6558', bg: 'rgba(107,101,88,0.10)',icon: <FolderUp className="w-2.5 h-2.5" /> },
+  licensed:{ label: '授权获得', labelEn: 'Licensed',        color: '#0F766E', bg: 'rgba(15,118,110,0.12)', icon: <Shield className="w-2.5 h-2.5" /> },
 };
 
 const RIGHTS_CONFIG = {
@@ -632,7 +636,7 @@ function LicensePublishModal({ pattern, onClose, onConfirm, isSellerReady, onOpe
 function CopyrightModal({ pattern, onClose, onConfirm }: {
   pattern: MyPattern;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (email: string) => void;
 }) {
   const [step, setStep] = useState<'info' | 'pay'>('info');
   const [agreed, setAgreed] = useState(false);
@@ -848,7 +852,7 @@ function CopyrightModal({ pattern, onClose, onConfirm }: {
                   ) : '我已完成扫码支付'}
                 </button>
               ) : (
-                <button onClick={onConfirm}
+                <button onClick={() => onConfirm(email.trim())}
                   className="w-full py-2.5 rounded-xl text-sm text-white flex items-center justify-center gap-1.5"
                   style={{ background: 'linear-gradient(135deg, #16A34A, #15803d)' }}>
                   <Check className="w-4 h-4" />支付成功 · 提交认证申请
@@ -883,16 +887,15 @@ const CRAFT_FIELDS_BASE: { key: keyof CraftInfo; label: string; type: 'select' |
   { key: 'patternDesc',      label: '图案描述',        type: 'textarea', required: true,  placeholder: '描述纹样的图案内容、主题意象及视觉特征…' },
   { key: 'innovationPoints', label: '创新亮点',        type: 'textarea', required: true,  placeholder: '描述纹样在传统基础上的创新之处，如：线条简化、配色革新、跨品类融合等…' },
   { key: 'adaptProducts',    label: '适配方向',        type: 'textarea', required: true,  placeholder: '描述适合落地的产品品类或应用场景，如：高端礼盒、真丝丝巾、家居软装…' },
-  { key: 'CLEAN', label: '', type: 'input', required: false, placeholder: '描��纹样在传统基础上的创新之处，如：线条简化、配色革新、跨品类融合等…' },
-  { key: 'adaptProducts',    label: '适配方向',        type: 'textarea', required: true,  placeholder: '描述适合落地的产品品类或应用场景，如：高端礼盒、真丝丝巾、家居软装…' },
   { key: 'heritageSource',   label: '传承来源/工坊',   type: 'input',    required: false, placeholder: '如：南京云锦传承基地·柯桂荣工坊（选填）' },
 ];
 
-function RightsWizard({ pattern, userName, onClose, onConfirmed }: {
+function RightsWizard({ pattern, userName, onClose, onConfirmed, onViewCertificate }: {
   pattern: MyPattern;
   userName: string;
   onClose: () => void;
-  onConfirmed: (certNo: string, certIssuedAt: string, craft: CraftInfo) => void;
+  onConfirmed: (craft: CraftInfo) => Promise<MyPattern>;
+  onViewCertificate: (pattern: MyPattern) => void;
 }) {
   const [step, setStep] = useState<RightsStep>('info');
   const [craft, setCraft] = useState<CraftInfo>(pattern.craftInfo ?? {
@@ -913,7 +916,9 @@ function RightsWizard({ pattern, userName, onClose, onConfirmed }: {
     TECHNIQUES.includes(craft.technique) ? '' : craft.technique
   );
   const [encryptProgress, setEncryptProgress] = useState(0);
-  const [certNo] = useState(genCertNo);
+  const [confirmedPattern, setConfirmedPattern] = useState<MyPattern | null>(null);
+  const [certNo, setCertNo] = useState(pattern.certNo ?? '');
+  const [certIssuedAt, setCertIssuedAt] = useState(pattern.certIssuedAt ?? '');
 
   const sourceDesc: Record<string, string> = {
     zhihui:  `AI 对话记录摘要 + 纹样图案 + 品类专属工艺特征 + 风格类别 + 材质 + 创新点描述`,
@@ -943,8 +948,18 @@ function RightsWizard({ pattern, userName, onClose, onConfirmed }: {
       await new Promise(r => setTimeout(r, 280));
       setEncryptProgress(p);
     }
-    await new Promise(r => setTimeout(r, 400));
-    setStep('done');
+    try {
+      const updatedPattern = await onConfirmed(finalCraft);
+      setConfirmedPattern(updatedPattern);
+      setCertNo(updatedPattern.certNo ?? genCertNo());
+      setCertIssuedAt(updatedPattern.certIssuedAt ?? nowStr());
+      await new Promise(r => setTimeout(r, 400));
+      setStep('done');
+    } catch (error: any) {
+      toast.error(error?.message || '确权失败，请稍后重试');
+      setStep('craft');
+      setEncryptProgress(0);
+    }
   };
 
   return (
@@ -1224,7 +1239,7 @@ function RightsWizard({ pattern, userName, onClose, onConfirmed }: {
                       { label: '纹样名称', value: pattern.title },
                       { label: '品类',    value: pattern.category ?? '—' },
                       { label: '设计师',  value: userName },
-                      { label: '确权时间', value: nowStr() },
+                      { label: '确权时间', value: certIssuedAt || nowStr() },
                     ].map(row => (
                       <div key={row.label} className="flex items-center justify-between py-1.5"
                         style={{ borderBottom: '1px solid rgba(196,145,42,0.12)' }}>
@@ -1281,10 +1296,17 @@ function RightsWizard({ pattern, userName, onClose, onConfirmed }: {
               </>
             )}
             {step === 'done' && (
-              <button onClick={() => onConfirmed(certNo, nowStr(), { ...craft, weaveStructure: resolvedWeave, technique: resolvedTech })}
+              <button
+                onClick={() => {
+                  if (confirmedPattern) {
+                    onViewCertificate(confirmedPattern);
+                    return;
+                  }
+                  onClose();
+                }}
                 className="w-full py-2.5 rounded-xl text-sm text-white"
                 style={{ background: 'linear-gradient(135deg, #16A34A, #15803D)' }}>
-                完成，确权证书
+                完成，查看证书
               </button>
             )}
           </div>
@@ -1294,15 +1316,30 @@ function RightsWizard({ pattern, userName, onClose, onConfirmed }: {
   );
 }
 
+type UploadPatternDraft = {
+  title: string;
+  desc: string;
+  tags: string[];
+  category: string;
+  style: string;
+  material: string;
+  colorTone: string;
+  coverFile: File;
+  certFile?: File;
+};
+
 /** Upload modal — all fields required except tags; "其他" expansions; smart submit button */
-function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: (p: Partial<MyPattern> & { title: string }) => void }) {
+function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: (draft: UploadPatternDraft) => Promise<void> | void }) {
   const [form, setForm] = useState({
     title: '', desc: '', category: '', style: '', material: '', colorTone: '', tags: '',
     categoryCustom: '', styleCustom: '', materialCustom: '', colorToneCustom: '',
   });
   const [imageUrl, setImageUrl] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [hasCopyrightCert, setHasCopyrightCert] = useState<'no' | 'yes'>('no');
   const [copyrightCertImageUrl, setCopyrightCertImageUrl] = useState('');
+  const [copyrightCertFile, setCopyrightCertFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
   const certFileRef = useRef<HTMLInputElement>(null);
@@ -1344,6 +1381,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
     if (file.size > 5 * 1024 * 1024) { toast.error('图片不能超过 5MB'); return; }
     const reader = new FileReader();
     reader.onload = ev => {
+      setImageFile(file);
       setImageUrl(ev.target?.result as string);
       setErrors(p => ({ ...p, image: '' }));
     };
@@ -1354,25 +1392,36 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
     if (!file.type.startsWith('image/')) { toast.error('请选择图片文件'); return; }
     if (file.size > 10 * 1024 * 1024) { toast.error('图片不能超过 10MB'); return; }
     const reader = new FileReader();
-    reader.onload = ev => setCopyrightCertImageUrl(ev.target?.result as string);
+    reader.onload = ev => {
+      setCopyrightCertFile(file);
+      setCopyrightCertImageUrl(ev.target?.result as string);
+    };
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
-    onUploaded({
-      title: form.title.trim(), desc: form.desc.trim(),
-      tags: form.tags.split(/[,，]/).map(t => t.trim()).filter(Boolean),
-      imageUrl: imageUrl || 'https://images.unsplash.com/photo-1763696118762-03f8fcfb8a8c?w=600',
-      category: resolvedCategory,
-      style: resolvedStyle,
-      material: resolvedMaterial,
-      colorTone: resolvedColorTone,
-      hasCopyrightCert: hasCopyrightCert === 'yes',
-      copyrightCertImageUrl: hasCopyrightCert === 'yes' ? copyrightCertImageUrl : undefined,
-      // 如已持有版权证书则直接标记为 done
-      copyrightStatus: hasCopyrightCert === 'yes' && copyrightCertImageUrl ? 'done' : 'none',
-    });
+    if (!imageFile) {
+      toast.error('请先上传纹样图片');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await onUploaded({
+        title: form.title.trim(),
+        desc: form.desc.trim(),
+        tags: form.tags.split(/[,，]/).map(t => t.trim()).filter(Boolean),
+        category: resolvedCategory,
+        style: resolvedStyle,
+        material: resolvedMaterial,
+        colorTone: resolvedColorTone,
+        coverFile: imageFile,
+        certFile: hasCopyrightCert === 'yes' ? (copyrightCertFile || undefined) : undefined,
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Reusable "其他" select+input field
@@ -1443,7 +1492,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
               {imageUrl ? (
                 <div className="relative w-full">
                   <img src={imageUrl} alt="preview" className="w-full h-44 object-cover" />
-                  <button onClick={e => { e.stopPropagation(); setImageUrl(''); }}
+                  <button onClick={e => { e.stopPropagation(); setImageUrl(''); setImageFile(null); }}
                     className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center">
                     <X className="w-3.5 h-3.5 text-white" />
                   </button>
@@ -1538,7 +1587,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
               {/* Radio 选项 */}
               <div className="flex gap-4">
                 {(['no', 'yes'] as const).map(val => (
-                  <button key={val} onClick={() => { setHasCopyrightCert(val); if (val === 'no') setCopyrightCertImageUrl(''); }}
+                  <button key={val} onClick={() => { setHasCopyrightCert(val); if (val === 'no') { setCopyrightCertImageUrl(''); setCopyrightCertFile(null); } }}
                     className="flex items-center gap-2 py-1.5 px-3 rounded-xl transition-all"
                     style={{
                       border: hasCopyrightCert === val ? '1.5px solid #1A3D4A' : '1.5px solid rgba(26,61,74,0.12)',
@@ -1571,7 +1620,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
                     {copyrightCertImageUrl ? (
                       <div className="relative w-full">
                         <img src={copyrightCertImageUrl} alt="版权证书预览" className="w-full max-h-40 object-contain" />
-                        <button onClick={e => { e.stopPropagation(); setCopyrightCertImageUrl(''); }}
+                        <button onClick={e => { e.stopPropagation(); setCopyrightCertImageUrl(''); setCopyrightCertFile(null); }}
                           className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center">
                           <X className="w-3 h-3 text-white" />
                         </button>
@@ -1614,14 +1663,14 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm text-[#6B6558]"
             style={{ border: '1px solid rgba(26,61,74,0.12)' }}>取消</button>
           {/* Issue 17: button grayed out unless all required filled */}
-          <button onClick={handleSave}
-            disabled={!canSubmit}
+          <button onClick={() => { void handleSave(); }}
+            disabled={!canSubmit || submitting}
             className="flex-1 py-2.5 rounded-xl text-sm text-white transition-all"
             style={{
-              background: canSubmit ? 'linear-gradient(135deg, #1A3D4A, #2A5568)' : 'rgba(26,61,74,0.25)',
-              cursor: canSubmit ? 'pointer' : 'default',
+              background: canSubmit && !submitting ? 'linear-gradient(135deg, #1A3D4A, #2A5568)' : 'rgba(26,61,74,0.25)',
+              cursor: canSubmit && !submitting ? 'pointer' : 'default',
             }}>
-            保存到我的纹样
+            {submitting ? '保存中...' : '保存到我的纹样'}
           </button>
         </div>
       </motion.div>
@@ -1647,8 +1696,11 @@ function PatternCard({ pattern, userName, onZoom, onRights, onCert, onPublish, o
   const src = SOURCE_CONFIG[pattern.source];
   const rights = RIGHTS_CONFIG[pattern.rightsStatus];
   const isDone = pattern.rightsStatus === 'done';
-  // Cannot delete: published OR copyright certification in progress
-  const canDelete = !pattern.published && pattern.copyrightStatus !== 'applied';
+  const canDelete = pattern.canDelete ?? (!pattern.published && pattern.copyrightStatus !== 'applied');
+  const canConfirmRights = pattern.canConfirmRights ?? (!isDone && pattern.source !== 'licensed');
+  const canPublish = pattern.canPublish ?? (isDone && !pattern.published && pattern.source !== 'licensed');
+  const canApplyCopyright = pattern.canApplyCopyright ?? (isDone && pattern.copyrightStatus === 'none' && pattern.source !== 'licensed');
+  const canUnpublish = pattern.canUnpublish ?? pattern.published;
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
@@ -1720,7 +1772,7 @@ function PatternCard({ pattern, userName, onZoom, onRights, onCert, onPublish, o
       {/* Consistent action buttons */}
       <div className="px-3 pb-3 space-y-1.5">
         {/* 待确权: single full-width button */}
-        {!isDone && (
+        {canConfirmRights && (
           <button onClick={onRights}
             className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] text-white"
             style={{ background: 'linear-gradient(135deg, #C4912A, #A87920)' }}>
@@ -1736,18 +1788,33 @@ function PatternCard({ pattern, userName, onZoom, onRights, onCert, onPublish, o
               style={{ background: 'rgba(22,163,74,0.07)', color: '#16A34A', border: '1px solid rgba(22,163,74,0.2)' }}>
               <Eye className="w-3.5 h-3.5" /><span>确权证书</span>
             </button>
-            <button onClick={onPublish}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] transition-all"
-              style={{ background: 'rgba(26,61,74,0.06)', color: '#1A3D4A', border: '1px solid rgba(26,61,74,0.12)' }}>
-              <Globe className="w-3.5 h-3.5" /><span>纹样发布</span>
-            </button>
+            {canPublish ? (
+              <button onClick={onPublish}
+                className="flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] transition-all"
+                style={{ background: 'rgba(26,61,74,0.06)', color: '#1A3D4A', border: '1px solid rgba(26,61,74,0.12)' }}>
+                <Globe className="w-3.5 h-3.5" /><span>纹样发布</span>
+              </button>
+            ) : (
+              <div
+                className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl text-[10px]"
+                style={{ background: 'rgba(26,61,74,0.03)', color: '#9B9590', border: '1px solid rgba(26,61,74,0.08)' }}>
+                <Globe className="w-3.5 h-3.5" /><span>不可发布</span>
+              </div>
+            )}
             {/* Issue 4: copyright "认证中" is clickable to see progress + cancel */}
-            {pattern.copyrightStatus === 'none' && (
+            {pattern.copyrightStatus === 'none' && canApplyCopyright && (
               <button onClick={onCopyright}
                 className="flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] transition-all"
                 style={{ background: 'rgba(26,61,74,0.04)', color: '#6B6558', border: '1px solid rgba(26,61,74,0.1)' }}>
                 <Award className="w-3.5 h-3.5" /><span>版权认证</span>
               </button>
+            )}
+            {pattern.copyrightStatus === 'none' && !canApplyCopyright && (
+              <div
+                className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl text-[10px]"
+                style={{ background: 'rgba(26,61,74,0.03)', color: '#9B9590', border: '1px solid rgba(26,61,74,0.08)' }}>
+                <Award className="w-3.5 h-3.5" /><span>不可申证</span>
+              </div>
             )}
             {pattern.copyrightStatus === 'applied' && (
               <button onClick={onCopyrightProgress}
@@ -1775,16 +1842,28 @@ function PatternCard({ pattern, userName, onZoom, onRights, onCert, onPublish, o
               <Eye className="w-3.5 h-3.5" /><span>确权证书</span>
             </button>
             <button onClick={onUnpublish}
+              disabled={!canUnpublish}
               className="flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] transition-all"
-              style={{ background: 'rgba(239,68,68,0.06)', color: '#DC2626', border: '1px solid rgba(239,68,68,0.15)' }}>
+              style={{
+                background: canUnpublish ? 'rgba(239,68,68,0.06)' : 'rgba(26,61,74,0.03)',
+                color: canUnpublish ? '#DC2626' : '#9B9590',
+                border: canUnpublish ? '1px solid rgba(239,68,68,0.15)' : '1px solid rgba(26,61,74,0.08)',
+              }}>
               <Globe2 className="w-3.5 h-3.5" /><span>取消发布</span>
             </button>
-            {pattern.copyrightStatus === 'none' && (
+            {pattern.copyrightStatus === 'none' && canApplyCopyright && (
               <button onClick={onCopyright}
                 className="flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] transition-all"
                 style={{ background: 'rgba(26,61,74,0.04)', color: '#6B6558', border: '1px solid rgba(26,61,74,0.1)' }}>
                 <Award className="w-3.5 h-3.5" /><span>版权认证</span>
               </button>
+            )}
+            {pattern.copyrightStatus === 'none' && !canApplyCopyright && (
+              <div
+                className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl text-[10px]"
+                style={{ background: 'rgba(26,61,74,0.03)', color: '#9B9590', border: '1px solid rgba(26,61,74,0.08)' }}>
+                <Award className="w-3.5 h-3.5" /><span>不可申证</span>
+              </div>
             )}
             {pattern.copyrightStatus === 'applied' && (
               <button onClick={onCopyrightProgress}
@@ -1828,16 +1907,20 @@ function PatternCard({ pattern, userName, onZoom, onRights, onCert, onPublish, o
             {pattern.published ? '取消发布后方可删除' : '撤销版权申请后方可删除'}
           </p>
         )}
+        {!canConfirmRights && !isDone && (
+          <p className="text-center text-[10px] text-[#9B9590] py-0.5">该纹样来源不支持再次确权</p>
+        )}
       </div>
     </motion.div>
   );
 }
 
 /** Copyright Progress / Certificate Modal */
-function CopyrightProgressModal({ pattern, onClose, onCancel }: {
+function CopyrightProgressModal({ pattern, onClose, onCancel, onSync }: {
   pattern: MyPattern;
   onClose: () => void;
   onCancel: () => void;
+  onSync: () => void;
 }) {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const isDone = pattern.copyrightStatus === 'done';
@@ -2107,6 +2190,13 @@ function CopyrightProgressModal({ pattern, onClose, onCancel }: {
             <div className="flex gap-2">
               <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm text-[#1A3D4A]"
                 style={{ border: '1px solid rgba(26,61,74,0.15)', fontWeight: 500 }}>关闭</button>
+              {!isDone && (
+                <button onClick={onSync}
+                  className="flex-1 py-2.5 rounded-xl text-sm text-white"
+                  style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
+                  同步版权证书
+                </button>
+              )}
               <button onClick={() => setConfirmCancel(true)}
                 className="flex-1 py-2.5 rounded-xl text-sm text-[#9B9590]"
                 style={{ border: '1px solid rgba(26,61,74,0.1)' }}>撤销申请</button>
@@ -2130,16 +2220,218 @@ function CopyrightProgressModal({ pattern, onClose, onCancel }: {
   );
 }
 
+function SyncCopyrightCertModal({
+  pattern,
+  onClose,
+  onConfirm,
+}: {
+  pattern: MyPattern;
+  onClose: () => void;
+  onConfirm: (payload: { certNo?: string; certFile: File }) => Promise<void> | void;
+}) {
+  const [certNo, setCertNo] = useState(pattern.copyrightCertNo ?? '');
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf';
+    if (!isImage && !isPdf) {
+      toast.error('请上传图片或 PDF 证书文件');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('证书文件不能超过 10MB');
+      return;
+    }
+    setCertFile(file);
+    setError('');
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl('');
+    }
+
+    if (isImage) {
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!certFile) {
+      setError('请先上传版权证书文件');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onConfirm({
+        certNo: certNo.trim() || undefined,
+        certFile,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[95] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.94, y: 12 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.94, y: 12 }}
+        className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+        style={{ border: '1px solid rgba(26,61,74,0.1)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4" style={{ background: 'rgba(26,61,74,0.04)', borderBottom: '1px solid rgba(26,61,74,0.07)' }}>
+          <div className="flex items-center gap-2">
+            <Award className="w-5 h-5 text-[#1A3D4A]" />
+            <span className="text-[#1A3D4A]" style={{ fontWeight: 600 }}>同步版权证书</span>
+          </div>
+          <button onClick={onClose}><X className="w-4 h-4 text-[#6B6558]" /></button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="rounded-xl p-3" style={{ background: 'rgba(26,61,74,0.03)', border: '1px solid rgba(26,61,74,0.07)' }}>
+            <p className="text-xs text-[#1A3D4A]" style={{ fontWeight: 600 }}>{pattern.title}</p>
+            <p className="mt-1 text-[11px] text-[#6B6558]">上传国家版权局证书后，系统会将当前纹样状态同步为“版权已认证”。</p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-[#1A3D4A]" style={{ fontWeight: 500 }}>版权证书编号</label>
+            <input
+              value={certNo}
+              onChange={e => setCertNo(e.target.value)}
+              placeholder="选填，如：国作登字-2026-F-00000001"
+              className="w-full rounded-xl bg-white px-3 py-2 text-sm text-[#1A3D4A] outline-none"
+              style={{ border: '1.5px solid rgba(26,61,74,0.12)' }}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-[#1A3D4A]" style={{ fontWeight: 500 }}>
+              版权证书文件 <span className="text-red-500">*</span>
+            </label>
+            <div
+              onClick={() => fileRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleFile(file);
+              }}
+              className="cursor-pointer overflow-hidden rounded-2xl"
+              style={{
+                border: `2px dashed ${error ? '#DC2626' : 'rgba(196,145,42,0.35)'}`,
+                background: previewUrl || certFile ? 'white' : 'rgba(196,145,42,0.03)',
+              }}
+            >
+              {previewUrl ? (
+                <div className="relative">
+                  <img src={previewUrl} alt="证书预览" className="max-h-56 w-full object-contain" />
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      setCertFile(null);
+                      setPreviewUrl('');
+                    }}
+                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50"
+                  >
+                    <X className="w-3.5 h-3.5 text-white" />
+                  </button>
+                </div>
+              ) : certFile ? (
+                <div className="flex items-center justify-between px-4 py-4">
+                  <div>
+                    <p className="text-sm text-[#1A3D4A]" style={{ fontWeight: 500 }}>{certFile.name}</p>
+                    <p className="mt-1 text-[10px] text-[#9B9590]">已选择证书文件</p>
+                  </div>
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      setCertFile(null);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(26,61,74,0.08)]"
+                  >
+                    <X className="w-3.5 h-3.5 text-[#1A3D4A]" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex min-h-[140px] flex-col items-center justify-center gap-2 py-6">
+                  <Award className="w-8 h-8 text-[#C4912A]" />
+                  <p className="text-xs text-[#6B6558]">点击上传 或 拖拽证书图片 / PDF 到此处</p>
+                  <p className="text-[10px] text-[#9B9590]">JPG / PNG / PDF，≤ 10MB</p>
+                </div>
+              )}
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handleFile(file);
+              }}
+            />
+            {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+          </div>
+        </div>
+
+        <div className="flex gap-2 px-5 pb-5 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-xl py-2.5 text-sm text-[#6B6558]"
+            style={{ border: '1px solid rgba(26,61,74,0.12)' }}
+          >
+            取消
+          </button>
+          <button
+            onClick={() => { void handleSubmit(); }}
+            disabled={!certFile || submitting}
+            className="flex-1 rounded-xl py-2.5 text-sm text-white"
+            style={{
+              background: certFile && !submitting ? 'linear-gradient(135deg, #1A3D4A, #2A5568)' : 'rgba(26,61,74,0.25)',
+              cursor: certFile && !submitting ? 'pointer' : 'default',
+            }}
+          >
+            {submitting ? '同步中...' : '确认同步'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type FilterSource = 'all' | 'zhihui' | 'copilot' | 'upload';
+type FilterSource = 'all' | 'zhihui' | 'copilot' | 'upload' | 'licensed';
 type FilterRights = 'all' | 'none' | 'processing' | 'done' | 'published' | 'copyright' | 'copyrightDone';
 
 export function InspirationLibraryPage() {
   const {
-    myPatterns, addMyPattern, updateMyPattern, removeMyPattern, clearRedDot,
-    isSellerReady, updateLicenseConfig, sellerProfile,
+    myPatterns, myPatternsLoading, reloadMyPatterns, clearRedDot,
+    isSellerReady, updateLicenseConfig,
   } = useApp();
+  const { user } = useAuth();
 
   const [search, setSearch] = useState('');
   const [filterSource, setFilterSource] = useState<FilterSource>('all');
@@ -2152,13 +2444,18 @@ export function InspirationLibraryPage() {
   const [publishPattern, setPublishPattern]   = useState<MyPattern | null>(null);
   const [copyrightPattern, setCopyrightPattern] = useState<MyPattern | null>(null);
   const [copyrightProgressPattern, setCopyrightProgressPattern] = useState<MyPattern | null>(null); // Issue 4/18
+  const [syncCopyrightPattern, setSyncCopyrightPattern] = useState<MyPattern | null>(null);
   const [showUpload, setShowUpload]           = useState(false);
   const [sellerCenterOpen, setSellerCenterOpen] = useState(false);
 
-  // Simulated username (in real app from auth)
-  const userName = '张设计师';
+  const userName = user?.displayName || user?.account || '当前用户';
 
-  useEffect(() => { clearRedDot('materials'); }, []);
+  useEffect(() => {
+    clearRedDot('materials');
+    void reloadMyPatterns().catch((error: any) => {
+      toast.error(error?.message || '加载我的纹样失败');
+    });
+  }, [clearRedDot, reloadMyPatterns]);
 
   const filtered = myPatterns.filter(p => {
     if (filterSource !== 'all' && p.source !== filterSource) return false;
@@ -2183,6 +2480,7 @@ export function InspirationLibraryPage() {
     zhihui: myPatterns.filter(p => p.source === 'zhihui').length,
     copilot: myPatterns.filter(p => p.source === 'copilot').length,
     upload: myPatterns.filter(p => p.source === 'upload').length,
+    licensed: myPatterns.filter(p => p.source === 'licensed').length,
     none: myPatterns.filter(p => p.rightsStatus === 'none').length,
     processing: myPatterns.filter(p => p.rightsStatus === 'processing').length,
     done: myPatterns.filter(p => p.rightsStatus === 'done').length,
@@ -2191,47 +2489,79 @@ export function InspirationLibraryPage() {
     copyrightDone: myPatterns.filter(p => p.copyrightStatus === 'done').length,
   };
 
-  const handleUpload = (partial: Partial<MyPattern> & { title: string }) => {
-    const now = nowStr();
-    const hasCert = partial.hasCopyrightCert === true && !!partial.copyrightCertImageUrl;
-    const newPattern: MyPattern = {
-      id: `mp_${Date.now()}`,
-      title: partial.title,
-      desc: partial.desc ?? '',
-      tags: partial.tags ?? [],
-      imageUrl: partial.imageUrl ?? '',
-      savedAt: now,
-      source: 'upload', sourceLabel: '自有上传',
-      category: partial.category, style: partial.style,
-      material: partial.material, colorTone: partial.colorTone,
-      createdAt: now,
-      rightsStatus: 'none',
-      copyrightStatus: partial.copyrightStatus ?? 'none',
-      hasCopyrightCert: partial.hasCopyrightCert,
-      copyrightCertImageUrl: partial.copyrightCertImageUrl,
-      copyrightDoneAt: hasCert ? now : undefined,
-      published: false,
-    };
-    addMyPattern(newPattern);
+  const reloadAndFindPattern = async (patternId: string) => {
+    const latestPatterns = await reloadMyPatterns();
+    return latestPatterns.find(item => item.id === patternId) || null;
+  };
+
+  const parseAdaptProducts = (value: string) =>
+    value
+      .split(/[\n,，、]/)
+      .map(item => item.trim())
+      .filter(Boolean);
+
+  const handleUpload = async (draft: UploadPatternDraft) => {
+    const coverFileId = await uploadFile(draft.coverFile);
+    const certFileId = draft.certFile ? await uploadFile(draft.certFile) : undefined;
+
+    await patternService.createFromUpload({
+      title: draft.title,
+      description: draft.desc,
+      coverFileId,
+      category: draft.category,
+      style: draft.style,
+      material: draft.material,
+      colorTone: draft.colorTone,
+      tags: draft.tags,
+      copyrightCertFileId: certFileId,
+    });
+    await reloadMyPatterns();
     setShowUpload(false);
-    toast.success(`「${partial.title}」已添加到我的纹样`, {
-      description: hasCert ? '已检测到版权证书，版权认证状态已同步标记为「已认证」' : undefined,
+    toast.success(`「${draft.title}」已添加到我的纹样`, {
+      description: certFileId ? '已检测到版权证书，状态已同步为“版权已认证”' : undefined,
     });
   };
 
-  const handleRightsConfirmed = (certNo: string, certIssuedAt: string, craft: CraftInfo) => {
+  const handleRightsConfirmed = async (craft: CraftInfo) => {
     if (!rightsPattern) return;
-    updateMyPattern(rightsPattern.id, { rightsStatus: 'done', certNo, certIssuedAt, craftInfo: craft });
-    const updated = { ...rightsPattern, rightsStatus: 'done' as const, certNo, certIssuedAt, craftInfo: craft };
-    setRightsPattern(null);
-    setTimeout(() => setCertPattern(updated), 100);
-    toast.success('确权成功！证书已生成', { description: `证书编号：${certNo}` });
+    await patternService.confirmRights(rightsPattern.id, {
+      weaveStructure: craft.weaveStructure,
+      technique: craft.technique,
+      colorLayers: craft.colorLayers,
+      repeatSize: craft.repeatSize,
+      materialSpec: craft.materialSpec,
+      complexity: String(craft.complexity),
+      patternDesc: craft.patternDesc,
+      innovationPoints: craft.innovationPoints,
+      adaptProducts: parseAdaptProducts(craft.adaptProducts),
+      heritageSource: craft.heritageSource?.trim() || undefined,
+    });
+    const updated = await reloadAndFindPattern(rightsPattern.id);
+    if (!updated) {
+      throw new Error('确权成功，但未能读取最新纹样信息');
+    }
+    toast.success('确权成功！证书已生成', { description: `证书编号：${updated.certNo ?? '系统已生成'}` });
+    return updated;
   };
 
-  const handlePublishConfirm = (config: LicenseConfig, price: string) => {
+  const handleRightsCertificateView = (pattern: MyPattern) => {
+    setRightsPattern(null);
+    setCertPattern(pattern);
+  };
+
+  const handlePublishConfirm = async (config: LicenseConfig, price: string) => {
     if (!publishPattern) return;
+    await patternService.publish(publishPattern.id, {
+      enableProject: config.enableProject,
+      enableAnnual: config.enableAnnual,
+      enableLimited: config.enableLimited,
+      projectPrice: Number(price),
+      region: config.region,
+      allowDerivative: config.allowDerivative,
+      allowCommercial: config.allowCommercial,
+    });
     updateLicenseConfig(publishPattern.id, config);
-    updateMyPattern(publishPattern.id, { published: true, price, publishedAt: nowStr() });
+    await reloadMyPatterns();
     setPublishPattern(null);
     const licenseTypes = [
       config.enableProject && '单项目',
@@ -2243,28 +2573,45 @@ export function InspirationLibraryPage() {
     });
   };
 
-  const handleUnpublish = (p: MyPattern) => {
-    updateMyPattern(p.id, { published: false, price: undefined, publishedAt: undefined });
+  const handleUnpublish = async (p: MyPattern) => {
+    await patternService.unpublish(p.id);
+    await reloadMyPatterns();
     toast.success(`「${p.title}」已从纹样市集下架`);
   };
 
-  const handleCopyrightConfirm = () => {
+  const handleCopyrightConfirm = async (email: string) => {
     if (!copyrightPattern) return;
-    updateMyPattern(copyrightPattern.id, { copyrightStatus: 'applied' });
+    await patternService.applyCopyright(copyrightPattern.id, { applyEmail: email });
+    await reloadMyPatterns();
     setCopyrightPattern(null);
     toast.success('版权认证申请已提交', { description: '预计7-15个工作日，完成后将通知您' });
   };
 
   // Issue 4: Cancel copyright certification
-  const handleCancelCopyright = () => {
+  const handleCancelCopyright = async () => {
     if (!copyrightProgressPattern) return;
-    updateMyPattern(copyrightProgressPattern.id, { copyrightStatus: 'none' });
+    await patternService.cancelCopyright(copyrightProgressPattern.id);
+    await reloadMyPatterns();
     setCopyrightProgressPattern(null);
     toast.success('版权认证申请已撤销', { description: '已支付费用不予退还，如需重新认证请再次申请' });
   };
 
-  const handleDelete = (p: MyPattern) => {
-    removeMyPattern(p.id);
+  const handleSyncCopyrightCert = async (payload: { certNo?: string; certFile: File }) => {
+    if (!syncCopyrightPattern) return;
+    const certFileId = await uploadFile(payload.certFile);
+    await patternService.syncCopyrightCertificate(syncCopyrightPattern.id, {
+      certNo: payload.certNo,
+      certFileId,
+    });
+    const updated = await reloadAndFindPattern(syncCopyrightPattern.id);
+    setSyncCopyrightPattern(null);
+    setCopyrightProgressPattern(updated);
+    toast.success('版权证书同步成功', { description: '当前纹样已更新为“版权已认证”' });
+  };
+
+  const handleDelete = async (p: MyPattern) => {
+    await patternService.deletePattern(p.id);
+    await reloadMyPatterns();
     toast.success(`「${p.title}」已删除`);
   };
 
@@ -2273,6 +2620,7 @@ export function InspirationLibraryPage() {
     { key: 'zhihui',  label: '智绘AI',   count: stats.zhihui  },
     { key: 'copilot', label: '设计提案', count: stats.copilot },
     { key: 'upload',  label: '自有上传', count: stats.upload  },
+    { key: 'licensed',label: '授权获得', count: stats.licensed },
   ];
 
 
@@ -2370,7 +2718,14 @@ export function InspirationLibraryPage() {
 
       {/* Pattern grid */}
       <div className="flex-1 overflow-y-auto px-6 py-5" style={{ scrollbarWidth: 'thin' }}>
-        {filtered.length === 0 ? (
+        {myPatternsLoading ? (
+          <div className="flex h-64 flex-col items-center justify-center text-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ background: 'rgba(26,61,74,0.06)' }}>
+              <div className="h-6 w-6 rounded-full border-2 border-[#C4912A]/30 border-t-[#C4912A] animate-spin" />
+            </div>
+            <p className="text-sm text-[#6B6558]" style={{ fontWeight: 500 }}>正在加载我的纹样…</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
               style={{ background: 'rgba(196,145,42,0.08)' }}>
@@ -2398,11 +2753,11 @@ export function InspirationLibraryPage() {
                   onRights={() => setRightsPattern(p)}
                   onCert={() => setCertPattern(p)}
                   onPublish={() => setPublishPattern(p)}
-                  onUnpublish={() => handleUnpublish(p)}
+                  onUnpublish={() => { void handleUnpublish(p); }}
                   onCopyright={() => setCopyrightPattern(p)}
                   onCancelCopyright={() => { setCopyrightProgressPattern(p); }}
                   onCopyrightProgress={() => setCopyrightProgressPattern(p)}
-                  onDelete={() => handleDelete(p)}
+                  onDelete={() => { void handleDelete(p); }}
                 />
               ))}
             </AnimatePresence>
@@ -2420,7 +2775,8 @@ export function InspirationLibraryPage() {
             pattern={rightsPattern}
             userName={userName}
             onClose={() => setRightsPattern(null)}
-            onConfirmed={(certNo, certIssuedAt, craft) => handleRightsConfirmed(certNo, certIssuedAt, craft)}
+            onConfirmed={handleRightsConfirmed}
+            onViewCertificate={handleRightsCertificateView}
           />
         )}
         {certPattern && (
@@ -2444,7 +2800,18 @@ export function InspirationLibraryPage() {
           <CopyrightProgressModal
             pattern={copyrightProgressPattern}
             onClose={() => setCopyrightProgressPattern(null)}
-            onCancel={handleCancelCopyright}
+            onCancel={() => { void handleCancelCopyright(); }}
+            onSync={() => {
+              setSyncCopyrightPattern(copyrightProgressPattern);
+              setCopyrightProgressPattern(null);
+            }}
+          />
+        )}
+        {syncCopyrightPattern && (
+          <SyncCopyrightCertModal
+            pattern={syncCopyrightPattern}
+            onClose={() => setSyncCopyrightPattern(null)}
+            onConfirm={handleSyncCopyrightCert}
           />
         )}
         {showUpload && (
