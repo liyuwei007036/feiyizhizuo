@@ -65,6 +65,7 @@ interface Session {
 interface GeneratedPattern {
   id: string;
   status: 'pending' | 'ready' | 'failed';
+  taskId?: string;
   requestId?: string;
   recordId?: string;
   fileId?: string;
@@ -568,6 +569,11 @@ export function ZhiHuiPage() {
     setCurrentSessionId(value);
   };
 
+  const updateAssistantMessageId = (value: string | null) => {
+    assistantMsgIdRef.current = value;
+    setAssistantMsgId(value);
+  };
+
   const readPersistedTask = useCallback((sessionId: string | null) => {
     if (!sessionId) return null;
     return readPersistedTaskMap()[sessionId] || null;
@@ -896,6 +902,7 @@ export function ZhiHuiPage() {
   const buildPatternFromImage = (
     image: ConversationImage,
     options: {
+      taskId?: string;
       title?: string;
       desc?: string;
       tags?: string[];
@@ -911,6 +918,7 @@ export function ZhiHuiPage() {
     return {
       id: recordId || (requestId ? `${requestId}:${fileId}` : fileId),
       status: 'ready',
+      taskId: options.taskId,
       requestId,
       recordId,
       fileId: fileId || undefined,
@@ -925,10 +933,11 @@ export function ZhiHuiPage() {
 
   const buildPatternFromFileId = (
     fileId: string,
-    options: { title?: string; desc?: string; tags?: string[]; requestId?: string; recordId?: string } = {}
+    options: { taskId?: string; title?: string; desc?: string; tags?: string[]; requestId?: string; recordId?: string } = {}
   ): GeneratedPattern => ({
     id: options.recordId || (options.requestId ? `${options.requestId}:${fileId}` : fileId),
     status: 'ready',
+    taskId: options.taskId,
     requestId: options.requestId,
     recordId: options.recordId,
     fileId,
@@ -942,10 +951,11 @@ export function ZhiHuiPage() {
 
   const buildPendingPattern = (
     requestId: string,
-    options: { title?: string; desc?: string; tags?: string[]; recordId?: string } = {}
+    options: { taskId?: string; title?: string; desc?: string; tags?: string[]; recordId?: string } = {}
   ): GeneratedPattern => ({
     id: options.recordId || requestId,
     status: 'pending',
+    taskId: options.taskId,
     requestId,
     recordId: options.recordId,
     title: options.title || '纹样生成中',
@@ -959,6 +969,7 @@ export function ZhiHuiPage() {
   const buildFailedPattern = (
     requestId: string,
     options: {
+      taskId?: string;
       title?: string;
       desc?: string;
       tags?: string[];
@@ -970,6 +981,7 @@ export function ZhiHuiPage() {
   ): GeneratedPattern => ({
     id: options.recordId || requestId,
     status: 'failed',
+    taskId: options.taskId,
     requestId,
     recordId: options.recordId,
     title: options.title || '纹样生成失败',
@@ -1084,6 +1096,83 @@ export function ZhiHuiPage() {
     assistantMessageId: messageId,
   });
 
+  const normalizeMessageId = (messageId?: string | null) => {
+    const normalized = messageId?.trim();
+    return normalized ? normalized : null;
+  };
+
+  const ensureAssistantMessageBinding = (
+    messageId: string | null,
+    fallbackId: string | null,
+    options: { taskId?: string | null; timestamp?: string | number | Date | null } = {}
+  ) => {
+    const canonicalId = normalizeMessageId(messageId);
+    const localFallbackId = normalizeMessageId(fallbackId);
+    const targetId = canonicalId || localFallbackId;
+
+    if (!targetId) {
+      return null;
+    }
+
+    setMessages(prev => {
+      const canonicalIndex = canonicalId
+        ? prev.findIndex(message => message.id === canonicalId)
+        : -1;
+      const fallbackIndex = localFallbackId && localFallbackId !== canonicalId
+        ? prev.findIndex(message => message.id === localFallbackId)
+        : -1;
+
+      if (canonicalIndex === -1 && fallbackIndex === -1) {
+        if (!canonicalId) {
+          return prev;
+        }
+        return [...prev, buildAssistantPlaceholderMessage(canonicalId, options)];
+      }
+
+      if (!canonicalId || fallbackIndex === -1 || canonicalId === localFallbackId) {
+        return prev;
+      }
+
+      const canonicalMessage = canonicalIndex >= 0 ? prev[canonicalIndex] : null;
+      const fallbackMessage = prev[fallbackIndex];
+      const mergedMessage: ConvMessage = canonicalMessage
+        ? {
+            ...fallbackMessage,
+            ...canonicalMessage,
+            id: canonicalId,
+            role: 'system',
+            content: canonicalMessage.content || fallbackMessage.content,
+            timestamp: canonicalMessage.timestamp || fallbackMessage.timestamp,
+            taskId: canonicalMessage.taskId || fallbackMessage.taskId || options.taskId || undefined,
+            assistantMessageId: canonicalId,
+            images: mergeConversationImages(fallbackMessage.images, canonicalMessage.images || []),
+          }
+        : {
+            ...fallbackMessage,
+            id: canonicalId,
+            role: 'system',
+            timestamp: fallbackMessage.timestamp || formatMessageTime(options.timestamp),
+            taskId: fallbackMessage.taskId || options.taskId || undefined,
+            assistantMessageId: canonicalId,
+          };
+
+      const removeIds = new Set([canonicalId, localFallbackId]);
+      const targetIndex = canonicalIndex >= 0 ? canonicalIndex : fallbackIndex;
+      const removedBeforeTarget = [canonicalIndex, fallbackIndex]
+        .filter((index): index is number => index >= 0 && index < targetIndex)
+        .length;
+      const nextMessages = prev.filter(message => !removeIds.has(message.id));
+      nextMessages.splice(targetIndex - removedBeforeTarget, 0, mergedMessage);
+      return nextMessages;
+    });
+
+    if (canonicalId && assistantMsgIdRef.current !== canonicalId) {
+      updateAssistantMessageId(canonicalId);
+    }
+
+    return targetId;
+  };
+
   const upsertAssistantMessage = (
     messageId: string | null,
     updater: (message: ConvMessage) => ConvMessage,
@@ -1124,7 +1213,7 @@ export function ZhiHuiPage() {
 
   const extractPatternsFromImages = (
     images: ConversationImage[] | undefined,
-    options: { title?: string; desc?: string; requestId?: string; recordId?: string; tags?: string[] } = {}
+    options: { taskId?: string; title?: string; desc?: string; requestId?: string; recordId?: string; tags?: string[] } = {}
   ): GeneratedPattern[] => {
     if (!images || images.length === 0) return [];
     return images
@@ -1164,6 +1253,7 @@ export function ZhiHuiPage() {
       if (message.images?.length) {
         nextPatterns.push(
           ...extractPatternsFromImages(message.images, {
+            taskId: message.taskId,
             title,
             desc,
             requestId: requestId || undefined,
@@ -1177,6 +1267,7 @@ export function ZhiHuiPage() {
         if ((!message.images || message.images.length === 0) && fileIds.length > 0) {
           nextPatterns.push(
             ...fileIds.map(fileId => buildPatternFromFileId(fileId, {
+              taskId: message.taskId,
               title,
               desc,
               requestId: requestId || undefined,
@@ -1191,6 +1282,7 @@ export function ZhiHuiPage() {
         const pendingRecordIds = recordIds.length > 0 ? recordIds : requestId ? [requestId] : [];
         nextPatterns.push(
           ...pendingRecordIds.map(itemId => buildPendingPattern(requestId || itemId, {
+            taskId: message.taskId,
             title,
             desc: desc || '图片正在生成，完成后会自动替换为成图',
             tags,
@@ -1203,6 +1295,7 @@ export function ZhiHuiPage() {
         const failedRecordIds = recordIds.length > 0 ? recordIds : recordId ? [recordId] : [];
         nextPatterns.push(
           ...failedRecordIds.map(itemId => buildFailedPattern(requestId || itemId, {
+            taskId: message.taskId,
             title,
             desc: desc || '图片生成未成功，可重新发起生成。',
             tags,
@@ -1214,10 +1307,19 @@ export function ZhiHuiPage() {
     return nextPatterns;
   };
 
-  const getPatternsForMessage = (message: ConvMessage) =>
-    message.role === 'system'
-      ? extractPatternsFromConversation([message])
-      : [];
+  const getPatternsForMessage = (message: ConvMessage) => {
+    if (message.role !== 'system') {
+      return [];
+    }
+
+    const persistedPatterns = extractPatternsFromConversation([message]);
+    if (!message.taskId) {
+      return persistedPatterns;
+    }
+
+    const runtimePatterns = patterns.filter(pattern => pattern.taskId === message.taskId);
+    return mergePatternCollections(persistedPatterns, runtimePatterns);
+  };
 
   const resolveLatestAssistantMessageId = (
     conversation: ConvMessage[],
@@ -1266,12 +1368,14 @@ export function ZhiHuiPage() {
       updateLastEventId(snapshot.lastEventId);
     }
 
-    if (!assistantMsgIdRef.current && snapshot.assistantMessageId) {
-      setAssistantMsgId(snapshot.assistantMessageId);
-    }
-
-    const targetAssistantId =
-      assistantIdHint || assistantMsgIdRef.current || snapshot.assistantMessageId || null;
+    const targetAssistantId = ensureAssistantMessageBinding(
+      snapshot.assistantMessageId || null,
+      assistantMsgIdRef.current || assistantIdHint || null,
+      {
+        taskId: snapshot.taskId,
+        timestamp: Date.now(),
+      }
+    ) || snapshot.assistantMessageId || assistantMsgIdRef.current || assistantIdHint || null;
     const nextAssistantText = snapshot.assistantText || snapshot.artifact?.promptSummary || '';
     if (nextAssistantText) {
       applyAssistantText(targetAssistantId, nextAssistantText, {
@@ -1331,6 +1435,7 @@ export function ZhiHuiPage() {
           height: record.height,
         })),
         {
+          taskId: snapshot.taskId,
           title: artifact.promptSummary || nextAssistantText || '生成纹样',
           desc: artifact.promptSummary || nextAssistantText || '',
           tags: [selectedCategory],
@@ -1369,6 +1474,7 @@ export function ZhiHuiPage() {
           ...(recordImagePatterns.length === 0
             ? artifactFileIds.map(fileId =>
                 buildPatternFromFileId(fileId, {
+                  taskId: snapshot.taskId,
                   title: artifact.promptSummary || nextAssistantText || '生成纹样',
                   desc: artifact.promptSummary || nextAssistantText || '',
                   tags: [selectedCategory],
@@ -1390,6 +1496,7 @@ export function ZhiHuiPage() {
         mergePatterns(
           pendingIds.map(itemId =>
             buildPendingPattern(requestId || itemId, {
+              taskId: snapshot.taskId,
               title: artifact.promptSummary || nextAssistantText || '纹样生成中',
               desc: artifact.promptSummary || nextAssistantText || '图片正在生成，完成后会自动替换为成图',
               tags: [selectedCategory],
@@ -1406,6 +1513,7 @@ export function ZhiHuiPage() {
         mergePatterns(
           failedIds.map(itemId =>
             buildFailedPattern(requestId || itemId, {
+              taskId: snapshot.taskId,
               title: artifact.promptSummary || nextAssistantText || '纹样生成失败',
               desc: artifact.promptSummary || nextAssistantText || '图片生成未成功，可重新发起生成。',
               tags: [selectedCategory],
@@ -1424,6 +1532,22 @@ export function ZhiHuiPage() {
   };
 
   const updateTaskFromMessage = (msg: SSEMessage, assistantId: string) => {
+    if (currentTaskIdRef.current !== msg.taskId) {
+      return;
+    }
+    if (msg.sessionId && currentSessionIdRef.current && msg.sessionId !== currentSessionIdRef.current) {
+      return;
+    }
+
+    const targetAssistantId = ensureAssistantMessageBinding(
+      msg.messageId || null,
+      assistantMsgIdRef.current || assistantId || null,
+      {
+        taskId: msg.taskId,
+        timestamp: msg.occurredAt,
+      }
+    ) || msg.messageId || assistantMsgIdRef.current || assistantId || null;
+
     const previousRuntime = runtimeRef.current;
     const streamCursor = msg.id || msg.streamId || null;
     if (streamCursor) {
@@ -1484,18 +1608,18 @@ export function ZhiHuiPage() {
 
     patchRuntime(runtimePatch);
     patchAssistantMessage(
-      assistantId || null,
+      targetAssistantId,
       message => ({
         ...message,
         taskId: msg.taskId || message.taskId,
-        assistantMessageId: assistantId || message.assistantMessageId,
+        assistantMessageId: targetAssistantId || message.assistantMessageId,
         lastEventId: streamCursor || message.lastEventId,
         lastEventSeq: typeof msg.seq === 'number' ? msg.seq : message.lastEventSeq,
         status: runtimePatch.status || message.status,
         phase: msg.phase || runtimePatch.phase || message.phase,
         requestId: msg.requestId || message.requestId,
       }),
-      { taskId: msg.taskId }
+      { taskId: msg.taskId, timestamp: msg.occurredAt }
     );
 
     const lifecycleState = mapLifecycleState({
@@ -1520,11 +1644,14 @@ export function ZhiHuiPage() {
         break;
       case 'message.delta':
         setGenState('textGenerating');
-        setMessages(prev => prev.map(message =>
-          message.id === assistantId
-            ? { ...message, content: message.content + (msg.delta || '') }
-            : message
-        ));
+        patchAssistantMessage(
+          targetAssistantId,
+          message => ({
+            ...message,
+            content: `${message.content || ''}${msg.delta || ''}`,
+          }),
+          { taskId: msg.taskId, timestamp: msg.occurredAt }
+        );
         break;
       case 'message.completed':
         setGenState('finalizing');
@@ -1544,6 +1671,7 @@ export function ZhiHuiPage() {
           mergePatterns(
             (pendingRecordIds.length > 0 ? pendingRecordIds : [requestId]).map(itemId =>
               buildPendingPattern(requestId, {
+                taskId: msg.taskId,
                 title: msg.promptSummary || '纹样生成中',
                 desc: msg.promptSummary || '图片正在生成，完成后会自动替换为成图',
                 tags: [selectedCategory],
@@ -1553,7 +1681,7 @@ export function ZhiHuiPage() {
           );
 
           patchAssistantMessage(
-            assistantId || null,
+            targetAssistantId,
             message => ({
               ...message,
               requestId,
@@ -1561,7 +1689,7 @@ export function ZhiHuiPage() {
               recordIds: pendingRecordIds.length > 0 ? pendingRecordIds : message.recordIds,
               artifactStatus: 'PENDING',
             }),
-            { taskId: msg.taskId }
+            { taskId: msg.taskId, timestamp: msg.occurredAt }
           );
         }
         break;
@@ -1574,6 +1702,7 @@ export function ZhiHuiPage() {
         const requestId = msg.requestId || msg.taskId;
         const imagePatterns = artifactImages.length > 0
           ? extractPatternsFromImages(artifactImages, {
+              taskId: msg.taskId,
               title: msg.promptSummary || '生成纹样',
               desc: msg.promptSummary || '',
               tags: [selectedCategory],
@@ -1596,6 +1725,7 @@ export function ZhiHuiPage() {
         const filePatterns = artifactImages.length === 0
           ? fileIds.map(fileId =>
               buildPatternFromFileId(fileId, {
+                taskId: msg.taskId,
                 title: msg.promptSummary || '生成纹样',
                 desc: msg.promptSummary || '',
                 tags: [selectedCategory],
@@ -1607,7 +1737,7 @@ export function ZhiHuiPage() {
 
         mergePatterns([...imagePatterns, ...filePatterns]);
         patchAssistantMessage(
-          assistantId || null,
+          targetAssistantId,
           message => ({
             ...message,
             requestId,
@@ -1616,7 +1746,7 @@ export function ZhiHuiPage() {
             artifactStatus: 'READY',
             images: mergeConversationImages(message.images, artifactImages),
           }),
-          { taskId: msg.taskId }
+          { taskId: msg.taskId, timestamp: msg.occurredAt }
         );
         setGenState('finalizing');
         break;
@@ -1634,6 +1764,7 @@ export function ZhiHuiPage() {
         mergePatterns(
           (failedRecordIds.length > 0 ? failedRecordIds : [requestId]).map(itemId =>
             buildFailedPattern(requestId, {
+              taskId: msg.taskId,
               title: msg.promptSummary || '纹样生成失败',
               desc: msg.promptSummary || '图片生成未成功，可重新发起生成。',
               tags: [selectedCategory],
@@ -1645,7 +1776,7 @@ export function ZhiHuiPage() {
           )
         );
         patchAssistantMessage(
-          assistantId || null,
+          targetAssistantId,
           message => ({
             ...message,
             requestId,
@@ -1653,7 +1784,7 @@ export function ZhiHuiPage() {
             recordIds: failedRecordIds.length > 0 ? failedRecordIds : message.recordIds,
             artifactStatus: 'FAILED',
           }),
-          { taskId: msg.taskId }
+          { taskId: msg.taskId, timestamp: msg.occurredAt }
         );
         setGenState('failed');
         break;
@@ -1733,7 +1864,7 @@ export function ZhiHuiPage() {
   const clearTaskState = () => {
     closeTaskStream();
     updateCurrentTaskId(null);
-    setAssistantMsgId(null);
+    updateAssistantMessageId(null);
     updateLastEventId(null);
     resetRuntime();
     clearTaskEventLog();
@@ -1766,12 +1897,31 @@ export function ZhiHuiPage() {
   const subscribeToTask = (taskId: string, assistantId: string | null, resumeLastEventId?: string) => {
     closeTaskStream();
 
+    const expectedSessionId = currentSessionIdRef.current;
+    const isCurrentStreamContext = () => {
+      if (currentTaskIdRef.current !== taskId) {
+        return false;
+      }
+      if (expectedSessionId && currentSessionIdRef.current !== expectedSessionId) {
+        return false;
+      }
+      return true;
+    };
+
     sseRef.current = chatService.subscribeEvents(
       taskId,
-      (msg) => updateTaskFromMessage(msg, assistantId || assistantMsgIdRef.current || ''),
+      (msg) => {
+        if (!isCurrentStreamContext()) {
+          return;
+        }
+        updateTaskFromMessage(msg, assistantMsgIdRef.current || assistantId || '');
+      },
       {
         lastEventId: resumeLastEventId || lastEventIdRef.current || undefined,
         onStatus: (event) => {
+          if (!isCurrentStreamContext()) {
+            return;
+          }
           const connectionSummary = describeConnectionEvent(event);
           pushTaskEvent({
             kind: 'connection',
@@ -1787,10 +1937,13 @@ export function ZhiHuiPage() {
             updateLastEventId(event.lastEventId);
           }
           if (event.state === 'reconnecting' || (event.state === 'connected' && event.attempt > 1)) {
-            void syncTaskRecovery(taskId, assistantId, true);
+            void syncTaskRecovery(taskId, assistantMsgIdRef.current || assistantId, true);
           }
         },
         onError: (event) => {
+          if (!isCurrentStreamContext()) {
+            return;
+          }
           const connectionSummary = describeConnectionEvent(event);
           pushTaskEvent({
             kind: 'connection',
@@ -1920,7 +2073,7 @@ export function ZhiHuiPage() {
         ? resolveLatestAssistantMessageId(msgs, persistedTask.taskId)
         : null;
       const activeAssistantId = persistedTask?.taskId && shouldReplayTask(persistedTask.status)
-        ? persistedTask.assistantMessageId || taskAssistantId || null
+        ? taskAssistantId || persistedTask.assistantMessageId || null
         : latestAssistantId || persistedTask?.assistantMessageId || null;
       setMessages(msgs);
       setPatterns(
@@ -1929,7 +2082,7 @@ export function ZhiHuiPage() {
           extractPatternsFromConversation(msgs)
         )
       );
-      setAssistantMsgId(activeAssistantId);
+      updateAssistantMessageId(activeAssistantId);
 
       if (!persistedTask?.taskId) {
         setGenState('idle');
@@ -2141,8 +2294,9 @@ export function ZhiHuiPage() {
     setIsStreaming(true);
     setPatterns([]);
     updateLastEventId(null);
-    setAssistantMsgId(assistantId);
+    updateAssistantMessageId(assistantId);
     resetRuntime();
+    const submitVersion = sessionLoadVersionRef.current;
 
     try {
       const imageStyle = DEFAULT_CATEGORY.id.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
@@ -2156,16 +2310,6 @@ export function ZhiHuiPage() {
       });
 
       const { sessionId, taskId } = res.data;
-      updateCurrentSessionId(sessionId);
-      setActiveSession(sessionId);
-      updateCurrentTaskId(taskId);
-      setAssistantMsgId(assistantId);
-      patchRuntime({
-        status: res.data.status,
-        phase: res.data.phase,
-        queuePosition: res.data.queuePosition ?? null,
-        estimatedWaitMs: res.data.estimatedWaitMs ?? null,
-      });
       upsertPersistedTask(sessionId, {
         taskId,
         assistantMessageId: assistantId,
@@ -2176,6 +2320,25 @@ export function ZhiHuiPage() {
         estimatedWaitMs: res.data.estimatedWaitMs ?? null,
         requestId: null,
         patterns: [],
+      });
+      void refreshSessions();
+
+      const shouldBindToCurrentView =
+        sessionLoadVersionRef.current === submitVersion ||
+        currentSessionIdRef.current === sessionId;
+      if (!shouldBindToCurrentView) {
+        return;
+      }
+
+      updateCurrentSessionId(sessionId);
+      setActiveSession(sessionId);
+      updateCurrentTaskId(taskId);
+      updateAssistantMessageId(assistantId);
+      patchRuntime({
+        status: res.data.status,
+        phase: res.data.phase,
+        queuePosition: res.data.queuePosition ?? null,
+        estimatedWaitMs: res.data.estimatedWaitMs ?? null,
       });
       pushTaskEvent({
         kind: 'event',
@@ -2188,10 +2351,11 @@ export function ZhiHuiPage() {
       });
       setGenState(mapLifecycleState({ status: res.data.status, phase: res.data.phase }));
       clearComposerAttachments();
-
-      void refreshSessions();
       subscribeToTask(taskId, assistantId);
     } catch (err: any) {
+      if (sessionLoadVersionRef.current !== submitVersion) {
+        return;
+      }
       setIsStreaming(false);
       setGenState('idle');
       resetRuntime();
@@ -2640,6 +2804,17 @@ export function ZhiHuiPage() {
               msg.id === assistantMsgId &&
               showStatusText &&
               Boolean(taskStatusLine);
+            const assistantText = msg.content.trim();
+            const hasAssistantText = assistantText.length > 0;
+            const shouldRenderSystemMessage =
+              msg.role !== 'system' ||
+              hasAssistantText ||
+              showInlineStatus ||
+              messagePatterns.length > 0;
+
+            if (!shouldRenderSystemMessage) {
+              return null;
+            }
 
             return (
               <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -2651,15 +2826,17 @@ export function ZhiHuiPage() {
                       <Sparkles className="w-3.5 h-3.5 text-[#C4912A]" />
                     </div>
                     <div className="min-w-0 w-full">
-                      <div
-                        className="max-w-2xl px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed text-[#1A3D4A]"
-                        style={{ background: 'white', border: '1px solid rgba(26,61,74,0.07)' }}
-                      >
-                        {msg.content}
-                        <div className="text-[10px] mt-1.5 text-[#9B9590]">
-                          {msg.timestamp}
+                      {hasAssistantText && (
+                        <div
+                          className="max-w-2xl px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed text-[#1A3D4A]"
+                          style={{ background: 'white', border: '1px solid rgba(26,61,74,0.07)' }}
+                        >
+                          {assistantText}
+                          <div className="text-[10px] mt-1.5 text-[#9B9590]">
+                            {msg.timestamp}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       <AnimatePresence>
                         {showInlineStatus && (
