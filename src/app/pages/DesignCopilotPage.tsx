@@ -23,6 +23,7 @@ import {
   Upload, Cpu, GitMerge, Phone, RefreshCw, Lock, Pencil,
   MapPin, Wallet,
 } from 'lucide-react';
+import { ProtectedImage } from '../components/ProtectedImage';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -281,7 +282,7 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
       style={{ background:'rgba(0,0,0,0.9)' }} onClick={onClose}>
       <motion.div initial={{ scale:0.9 }} animate={{ scale:1 }} exit={{ scale:0.9 }}
         onClick={e => e.stopPropagation()} className="relative">
-        <img src={src} alt="" className="max-h-[88vh] max-w-full rounded-2xl object-contain" style={{ boxShadow:'0 24px 80px rgba(0,0,0,0.5)' }} />
+        <ProtectedImage src={src} alt="" className="max-h-[88vh] max-w-full rounded-2xl object-contain" style={{ boxShadow:'0 24px 80px rgba(0,0,0,0.5)' }} />
         <button onClick={onClose} className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center"
           style={{ background:'rgba(0,0,0,0.55)', backdropFilter:'blur(4px)' }}>
           <X className="w-4 h-4 text-white" />
@@ -410,7 +411,7 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
               {source === 'combined' && combineFile && (
                 <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl"
                   style={{ background:'rgba(107,79,138,0.06)', border:'1px solid rgba(107,79,138,0.15)' }}>
-                  <img src={combineFile.url} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                  <ProtectedImage src={combineFile.url} alt="" className="w-8 h-8 rounded-lg object-cover" />
                   <div>
                     <p className="text-xs text-[#6B4F8A]" style={{ fontWeight:500 }}>已上传：{combineFile.name}</p>
                     <p className="text-[10px] text-[#9B9590]">以下为与智绘AI融合生成的结果</p>
@@ -436,7 +437,7 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
                       </div>
                     ) : (
                       <>
-                        <img src={slot.url} alt={slot.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                        <ProtectedImage src={slot.url} alt={slot.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
                         <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 50%)' }} />
                         <div className="absolute bottom-0 left-0 right-0 px-2 pb-1.5">
                           <p className="text-[11px] text-white truncate" style={{ fontWeight:500, textShadow:'0 1px 3px rgba(0,0,0,0.5)' }}>{slot.name}</p>
@@ -495,7 +496,7 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
                   <button key={up.id} onClick={() => setSelUploadId(up.id)}
                     className="relative rounded-xl overflow-hidden aspect-square group"
                     style={{ border: selUploadId===up.id ? `2.5px solid ${cfg.color}` : '2.5px solid transparent' }}>
-                    <img src={up.url} alt={up.name} className="w-full h-full object-cover" />
+                    <ProtectedImage src={up.url} alt={up.name} className="w-full h-full object-cover" />
                     <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 50%)' }} />
                     <p className="absolute bottom-1 left-1 right-1 text-[10px] text-white truncate text-center" style={{ fontWeight:500 }}>{up.name.replace('.png','')}</p>
                     {selUploadId===up.id && (
@@ -568,7 +569,7 @@ function DirectionCard({ dir, isSelected, onSelect, onUnlock, onZoom, confirmedI
 
       {/* Image — 显示锁定纹样（问题5/6） */}
       <div className="relative overflow-hidden group" style={{ height: 160 }}>
-        <img src={displayImage} alt={dir.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+        <ProtectedImage src={displayImage} alt={dir.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.52) 0%, transparent 55%)' }} />
         <div className="absolute bottom-0 left-0 right-0 px-3 pb-2.5">
           <p className="text-white text-sm truncate" style={{ fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{dir.name}</p>
@@ -693,7 +694,7 @@ function ConfirmedDirectionCard({ dir, pattern, onZoom }: {
       <div className="flex">
         {/* Left: effect image */}
         <div className="relative group flex-shrink-0" style={{ width:240 }}>
-          <img src={dir.effectImage} alt={dir.name} className="w-full object-cover" style={{ height:240 }} />
+          <ProtectedImage src={dir.effectImage} alt={dir.name} className="w-full object-cover" style={{ height:240 }} />
           <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(13,37,53,0.4) 0%, transparent 50%)' }} />
           <button onClick={() => onZoom(dir.effectImage)}
             className="absolute bottom-3 right-3 w-8 h-8 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
@@ -740,7 +741,7 @@ function ConfirmedDirectionCard({ dir, pattern, onZoom }: {
           <div className="mt-auto p-3.5 rounded-2xl" style={{ background:`linear-gradient(135deg, rgba(26,61,74,0.03), rgba(26,61,74,0.06))`, border:'1px solid rgba(26,61,74,0.08)' }}>
             <p className="text-[10px] text-[#9B9590] mb-2 uppercase tracking-widest">已锁定纹样</p>
             <div className="flex items-center gap-3">
-              <img src={pattern.imageUrl} alt={pattern.name}
+              <ProtectedImage src={pattern.imageUrl} alt={pattern.name}
                 className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                 style={{ border:`2px solid ${cfg.color}33`, boxShadow:`0 2px 8px ${cfg.color}20` }} />
               <div className="flex-1 min-w-0">
@@ -1365,7 +1366,7 @@ function LegacyCreateWizard({ clients, onAddClient, onDeleteClient, getClientPro
                 <motion.div initial={{ opacity:0, y:-4 }} animate={{ opacity:1, y:0 }}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3"
                   style={{ background:'rgba(26,122,74,0.07)', border:'1px solid rgba(26,122,74,0.2)' }}>
-                  <img src={reviewConfirmedPattern.imageUrl} alt="" className="w-6 h-6 rounded-lg object-cover" />
+                      <ProtectedImage src={reviewConfirmedPattern.imageUrl} alt="" className="w-6 h-6 rounded-lg object-cover" />
                   <span className="text-xs text-[#1A7A4A]" style={{ fontWeight:600 }}>
                     已确认方向{reviewConfirmedDir.letter}「{reviewConfirmedDir.name}」· 纹样「{reviewConfirmedPattern.name}」已锁定
                   </span>
@@ -1516,7 +1517,7 @@ function PendingListPanel({ pending, onResume }: {
                     className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all hover:translate-y-[-1px]"
                     style={{ background: 'rgba(26,61,74,0.03)', border: '1px solid rgba(26,61,74,0.06)' }}>
                     {item.coverFileId ? (
-                      <img src={proposalFileUrl(item.coverFileId)} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                      <ProtectedImage src={proposalFileUrl(item.coverFileId)} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                     ) : (
                       <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
                         style={{ background: 'rgba(26,61,74,0.08)' }}>
@@ -1568,7 +1569,7 @@ function ProposalDirectionPreview({ direction, active, onOpen }: {
       </div>
       <div className="relative" style={{ height: 144, background: 'rgba(26,61,74,0.04)' }}>
         {cover ? (
-          <img src={cover} alt={direction.directionName} className="w-full h-full object-cover" />
+          <ProtectedImage src={cover} alt={direction.directionName} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Loader2 className={`w-6 h-6 ${direction.directionStatus === 'FAILED' ? 'text-red-500' : 'text-[#C4912A]'} ${direction.directionStatus === 'GENERATING' ? 'animate-spin' : ''}`} />
@@ -1669,7 +1670,7 @@ function ProposalStyleSelectModal({ direction, proposalStatus, selectedStyleImag
                 }}>
                 <div className="relative" style={{ height: 220, background: 'rgba(26,61,74,0.04)' }}>
                   {imageUrl ? (
-                    <img src={imageUrl} alt={styleImage.styleName} className="w-full h-full object-cover" />
+                    <ProtectedImage src={imageUrl} alt={styleImage.styleName} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center gap-2 px-4 text-center">
                       {styleImage.slotStatus === 'FAILED' ? (
@@ -2263,7 +2264,7 @@ function ProposalCard({ proposal, onEdit, onDelete }: {
       {/* Image header — compact */}
       {dir && (
         <div className="relative overflow-hidden group" style={{ height: 120 }}>
-          <img src={dir.effectImage} alt={dir.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          <ProtectedImage src={dir.effectImage} alt={dir.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
           <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.78) 0%, rgba(13,37,53,0.1) 55%, transparent 100%)' }} />
           {/* Direction type badge top-left */}
           <span className="absolute top-2.5 left-2.5 text-[10px] px-2 py-0.5 rounded-full"
@@ -2330,7 +2331,7 @@ function ProposalCard({ proposal, onEdit, onDelete }: {
             {proposal.lockedPattern && (
               <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
                 style={{ background: 'rgba(26,61,74,0.03)', border: '1px solid rgba(26,61,74,0.07)' }}>
-                <img src={proposal.lockedPattern.imageUrl} alt="" className="w-7 h-7 rounded-md object-cover flex-shrink-0"
+                <ProtectedImage src={proposal.lockedPattern.imageUrl} alt="" className="w-7 h-7 rounded-md object-cover flex-shrink-0"
                   style={{ border: `1.5px solid ${cfg.color}33` }} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] text-[#1A3D4A] truncate" style={{ fontWeight: 600 }}>{proposal.lockedPattern.name}</p>

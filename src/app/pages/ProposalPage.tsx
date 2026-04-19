@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { mockProposals, Proposal, mockDesignDirections } from '../data/mockData';
+import { ProtectedImage } from '../components/ProtectedImage';
 import {
   Search, Plus, ChevronRight, ChevronLeft, X, User, MapPin, Phone,
   DollarSign, Clock, CheckCircle2, AlertCircle, Star, FileText,
@@ -219,7 +220,7 @@ function NewProposalWizard({ onClose, onConfirm }: NewProposalWizardProps) {
                       <button key={dir.id}
                         onClick={() => setFormData(p => ({ ...p, selectedDirection: p.selectedDirection?.id === dir.id ? null : dir }))}
                         className={`relative rounded-xl border overflow-hidden transition-all ${formData.selectedDirection?.id === dir.id ? 'border-[#8B1C1C] ring-2 ring-[#8B1C1C]/20' : 'border-gray-200 hover:border-amber-300'}`}>
-                        <img src={dir.imageUrl} alt={dir.title} className="w-full h-16 object-cover" />
+                        <ProtectedImage src={dir.imageUrl} alt={dir.title} className="w-full h-16 object-cover" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                         <p className="absolute bottom-1 left-1 right-1 text-white text-[10px] leading-tight">{dir.title}</p>
                         {dir.recommended && <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400" />}
@@ -447,16 +448,20 @@ function PresentationMode({ proposal, images, onClose }: { proposal: Proposal; i
     >
       {/* Main Image */}
       <AnimatePresence mode="wait">
-        <motion.img
+        <motion.div
           key={currentIndex}
           initial={{ opacity: 0, scale: 1.05 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
-          src={images[currentIndex]}
-          alt={`Scheme ${currentIndex + 1}`}
-          className="max-w-full max-h-full object-contain"
-        />
+          className="max-w-full max-h-full"
+        >
+          <ProtectedImage
+            src={images[currentIndex]}
+            alt={`Scheme ${currentIndex + 1}`}
+            className="max-w-full max-h-full object-contain"
+          />
+        </motion.div>
       </AnimatePresence>
 
       {/* Top Bar */}
@@ -504,7 +509,7 @@ function PresentationMode({ proposal, images, onClose }: { proposal: Proposal; i
               {images.map((img, i) => (
                 <button key={i} onClick={() => setCurrentIndex(i)}
                   className={`w-12 h-9 rounded-lg overflow-hidden border-2 transition-all ${i === currentIndex ? 'border-white' : 'border-transparent opacity-50 hover:opacity-80'}`}>
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                  <ProtectedImage src={img} alt="" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
@@ -558,7 +563,7 @@ export function ProposalPage() {
     createdAt: cp.addedAt,
     updatedAt: cp.addedAt,
     manager: cp.clientName,
-    coverImage: 'https://images.unsplash.com/photo-1773394175834-2c407177ddcf?w=600',
+    coverImage: cp.patternImageUrl || 'https://images.unsplash.com/photo-1773394175834-2c407177ddcf?w=600',
     authNote: cp.summary,
   }));
 
@@ -683,7 +688,7 @@ export function ProposalPage() {
                 className={`w-full p-3.5 border-b border-gray-50 text-left hover:bg-gray-50 transition-colors ${isSelected ? 'bg-amber-50 border-l-2 border-l-[#8B1C1C]' : ''}`}>
                 <div className="flex items-start gap-2.5">
                   <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
-                    <img src={proposal.coverImage} alt={proposal.projectName} className="w-full h-full object-cover" />
+                    <ProtectedImage src={proposal.coverImage} alt={proposal.projectName} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
@@ -808,7 +813,7 @@ export function ProposalPage() {
                 <div className="col-span-2">
                   <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                     <div className="relative">
-                      <img src={schemeImages[currentSchemeIndex]} alt={`Scheme ${currentSchemeIndex + 1}`} className="w-full h-72 object-cover" />
+                      <ProtectedImage src={schemeImages[currentSchemeIndex]} alt={`Scheme ${currentSchemeIndex + 1}`} className="w-full h-72 object-cover" />
                       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/30" />
                       {schemeImages.length > 1 && (
                         <>
@@ -835,7 +840,7 @@ export function ProposalPage() {
                       {schemeImages.map((img, i) => (
                         <button key={i} onClick={() => setCurrentSchemeIndex(i)}
                           className={`w-16 h-12 rounded-lg overflow-hidden border-2 transition-all ${currentSchemeIndex === i ? 'border-[#8B1C1C]' : 'border-transparent hover:border-amber-300'}`}>
-                          <img src={img} alt={`thumb ${i}`} className="w-full h-full object-cover" />
+                          <ProtectedImage src={img} alt={`thumb ${i}`} className="w-full h-full object-cover" />
                         </button>
                       ))}
                     </div>

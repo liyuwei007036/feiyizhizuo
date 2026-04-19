@@ -3,6 +3,14 @@ import { Loader2 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { fetchWithAutoRefresh } from '../services/httpClient';
 
+function normalizeProtectedSrc(src: string) {
+  if (src.startsWith('/api/')) return src;
+  if (src.startsWith('/client/') || src.startsWith('/file/')) {
+    return `/api${src}`;
+  }
+  return src;
+}
+
 export function ProtectedImage({
   src,
   alt = '',
@@ -12,7 +20,8 @@ export function ProtectedImage({
 }: ImgHTMLAttributes<HTMLImageElement>) {
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(() => {
     if (!src || typeof src !== 'string') return null;
-    return src.startsWith('/api/') ? null : src;
+    const normalizedSrc = normalizeProtectedSrc(src);
+    return normalizedSrc.startsWith('/api/') ? null : normalizedSrc;
   });
 
   useEffect(() => {
@@ -21,8 +30,10 @@ export function ProtectedImage({
       return;
     }
 
-    if (typeof window === 'undefined' || !src.startsWith('/api/')) {
-      setResolvedSrc(src);
+    const normalizedSrc = normalizeProtectedSrc(src);
+
+    if (typeof window === 'undefined' || !normalizedSrc.startsWith('/api/')) {
+      setResolvedSrc(normalizedSrc);
       return;
     }
 
@@ -32,7 +43,7 @@ export function ProtectedImage({
 
     setResolvedSrc(null);
 
-    void fetchWithAutoRefresh(src, {
+    void fetchWithAutoRefresh(normalizedSrc, {
       signal: controller.signal,
     })
       .then(async response => {
@@ -48,7 +59,7 @@ export function ProtectedImage({
       })
       .catch(() => {
         if (!cancelled) {
-          setResolvedSrc(src);
+          setResolvedSrc(normalizedSrc);
         }
       });
 
