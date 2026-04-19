@@ -129,6 +129,7 @@ export interface CopilotClient {
   phone: string;
   budget: string;
   notes: string;
+  proposalCount?: number;
 }
 
 export interface CopilotProposal {

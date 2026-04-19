@@ -2,7 +2,20 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
-import type { CopilotProposal } from '../context/AppContext';
+import type { CopilotClient, CopilotProposal } from '../context/AppContext';
+import { customerService } from '../services/customerService';
+import {
+  proposalFileUrl,
+  proposalService,
+  type ProposalCardResponse,
+  type ProposalDetailResponse,
+  type ProposalDirectionDetail,
+  type ProposalPendingItem,
+  type ProposalPendingListResponse,
+  type ProposalPendingSummaryResponse,
+  type ProposalStatus,
+  type ProposalStyleImage,
+} from '../services/proposalService';
 import {
   Plus, User, Check, X, Zap, ChevronRight, ChevronLeft, Search,
   Sparkles, Trash2, AlertTriangle, Send,
@@ -42,6 +55,8 @@ interface Proposal {
   addedAt: string; notes: string;
   events: ProposalEvent[];
   clientBudget?: string;
+  readonly?: boolean;
+  backendProposalId?: string;
 }
 interface WizardState {
   selectedClientId: string | null;
@@ -116,6 +131,104 @@ function parseBudget(s: string): { lo: number; hi: number } | null {
 function fmtRange(lo: number, hi: number): string {
   const r = (n: number) => Math.round(n / 1000) * 1000;
   return `${r(lo).toLocaleString()} – ${r(hi).toLocaleString()}`;
+}
+
+const EMPTY_PENDING_SUMMARY: ProposalPendingSummaryResponse = {
+  processingCount: 0,
+  waitConfirmCount: 0,
+  failedCount: 0,
+};
+
+const EMPTY_PENDING_LIST: ProposalPendingListResponse = {
+  generating: [],
+  waitConfirm: [],
+  failed: [],
+};
+
+function fmtDateTime(value?: string | null) {
+  if (!value) return now8();
+  return value.replace('T', ' ').slice(0, 16);
+}
+
+function mapCustomerToCopilotClient(customer: {
+  customerId: string;
+  name: string;
+  company?: string;
+  stage?: string;
+  lastContactAt?: string;
+  intent?: string;
+  industry?: string;
+  phone?: string;
+  budget?: string;
+  notes?: string;
+  proposalCount?: number;
+}): CopilotClient {
+  return {
+    id: customer.customerId,
+    name: customer.name,
+    company: customer.company ?? '',
+    stage: customer.stage ?? '待接触',
+    lastContactAt: fmtDateTime(customer.lastContactAt),
+    intent: customer.intent ?? '待确认',
+    industry: customer.industry ?? '',
+    phone: customer.phone ?? '',
+    budget: customer.budget ?? '',
+    notes: customer.notes ?? '',
+    proposalCount: customer.proposalCount ?? 0,
+  };
+}
+
+function mapBackendCardToProposal(card: ProposalCardResponse): Proposal {
+  const coverUrl = proposalFileUrl(card.coverFileId);
+  const direction: Direction = {
+    id: `${card.proposalId}_${card.selectedDirectionCode}`,
+    type: card.selectedDirectionCode,
+    typeLabel: card.directionTypeLabel,
+    letter: card.directionLetter,
+    name: card.directionName,
+    positioning: card.positioning,
+    effectImage: coverUrl || DIR_TEMPLATES[card.selectedDirectionCode].effectImage,
+    suitableFor: card.suitableFor ?? [],
+    budget: card.estimatedPrice,
+    rightsStatus: 'available',
+    rightsLabel: '已确认',
+    craftTechnique: card.craftTechnique,
+    complexity: card.complexityLabel,
+    material: card.material,
+    deliveryDays: card.deliveryDays,
+    estimatedPrice: card.estimatedPrice,
+  };
+
+  return {
+    id: card.proposalId,
+    backendProposalId: card.proposalId,
+    readonly: true,
+    clientId: card.customerId ?? `backend_${card.proposalId}`,
+    clientName: card.clientName,
+    clientCompany: card.clientCompany ?? '',
+    clientPhone: card.clientPhone,
+    title: card.proposalTitle,
+    purpose: card.purpose,
+    concern: card.concern,
+    style: card.style,
+    elements: card.elements ?? [],
+    targetProducts: card.targetProducts ?? [],
+    directions: [direction],
+    selectedDirectionId: direction.id,
+    lockedPattern: {
+      id: card.selectedStyleImageId ?? `${card.proposalId}_locked`,
+      name: card.selectedStyleName ?? direction.name,
+      imageUrl: coverUrl || DIR_TEMPLATES[card.selectedDirectionCode].effectImage,
+      source: 'ai',
+      sourceLabel: 'AI 子风格图',
+    },
+    addedAt: fmtDateTime(card.confirmedAt),
+    notes: '',
+    events: [
+      { id: `${card.proposalId}_created`, type: 'created', timestamp: fmtDateTime(card.confirmedAt), description: '提案已确认' },
+    ],
+    clientBudget: card.clientBudget,
+  };
 }
 
 // ── Seed Data ─────────────────────────────────────────────────────────────────
@@ -770,10 +883,10 @@ function OtherInput({ value, onChange, placeholder }: { value: string; onChange:
   );
 }
 
-function CreateWizard({ clients, onAddClient, onDeleteClient, getClientProposalCount, onComplete, onClose, editingProposal, onUpdate }: {
-  clients: ReturnType<typeof useApp>['persistentClients'];
-  onAddClient: (name: string, phone: string, budget: string, address: string) => string;
-  onDeleteClient: (id: string) => void;
+function LegacyCreateWizard({ clients, onAddClient, onDeleteClient, getClientProposalCount, onComplete, onClose, editingProposal, onUpdate }: {
+  clients: CopilotClient[];
+  onAddClient: (name: string, phone: string, budget: string, address: string) => Promise<string>;
+  onDeleteClient: (id: string) => Promise<void>;
   getClientProposalCount: (clientId: string) => number;
   onComplete: (data: WizardState & { clientId: string; clientName: string; confirmedDirectionId: string; confirmedPattern: LockedPattern }) => void;
   onClose: () => void;
@@ -951,12 +1064,12 @@ function CreateWizard({ clients, onAddClient, onDeleteClient, getClientProposalC
     toast.success('已生成 3 个成交方向', { description:'请从下方选择一个方向并锁定纹样' });
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (!reviewConfirmedDir || !reviewConfirmedPattern) return;
     let clientId   = ws.selectedClientId ?? '';
     let clientName = isEditing ? ws.newClientName : (selectedClient?.name ?? ws.newClientName);
     if (!isEditing && !ws.selectedClientId && ws.newClientName.trim())
-      clientId = onAddClient(ws.newClientName.trim(), ws.newClientPhone.trim(), ws.newClientBudget.trim(), ws.newClientAddress.trim());
+      clientId = await onAddClient(ws.newClientName.trim(), ws.newClientPhone.trim(), ws.newClientBudget.trim(), ws.newClientAddress.trim());
 
     if (isEditing && onUpdate) {
       const effectivePurpose  = ws.purpose === '__other__' ? ws.purposeCustom : ws.purpose;
@@ -1087,7 +1200,18 @@ function CreateWizard({ clients, onAddClient, onDeleteClient, getClientProposalC
                               <p className="text-xs text-red-600 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3" />确认删除「{c.name}」？关联提案记录将保留。</p>
                               <div className="flex gap-2">
                                 <button onClick={() => setDeletingId(null)} className="flex-1 py-1.5 rounded-lg text-xs text-[#6B6558] bg-white" style={{ border:'1px solid rgba(26,61,74,0.12)' }}>取消</button>
-                                <button onClick={() => { onDeleteClient(c.id); setDeletingId(null); if (ws.selectedClientId===c.id) setWs(p=>({...p,selectedClientId:null})); }} className="flex-1 py-1.5 rounded-lg text-xs text-white" style={{ background:'#DC2626' }}>确认删除</button>
+                                <button onClick={() => {
+                                  void onDeleteClient(c.id)
+                                    .then(() => {
+                                      setDeletingId(null);
+                                      if (ws.selectedClientId === c.id) {
+                                        setWs(p => ({ ...p, selectedClientId: null }));
+                                      }
+                                    })
+                                    .catch(error => {
+                                      toast.error(error instanceof Error ? error.message : '客户删除失败');
+                                    });
+                                }} className="flex-1 py-1.5 rounded-lg text-xs text-white" style={{ background:'#DC2626' }}>确认删除</button>
                               </div>
                             </div>
                           )}
@@ -1327,6 +1451,787 @@ function CreateWizard({ clients, onAddClient, onDeleteClient, getClientProposalC
   );
 }
 
+function PendingSummaryButton({ summary, onClick }: {
+  summary: ProposalPendingSummaryResponse;
+  onClick: () => void;
+}) {
+  const hasPending = summary.processingCount + summary.waitConfirmCount + summary.failedCount > 0;
+  return (
+    <button
+      onClick={onClick}
+      className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all"
+      style={{
+        background: hasPending ? 'rgba(26,61,74,0.06)' : 'rgba(26,61,74,0.03)',
+        border: '1px solid rgba(26,61,74,0.09)',
+        color: '#1A3D4A',
+      }}>
+      <Clock className="w-4 h-4 text-[#C4912A]" />
+      <span style={{ fontWeight: 600 }}>处理中 {summary.processingCount}</span>
+      <span className="text-[#C4A88A]">|</span>
+      <span style={{ fontWeight: 600 }}>待确认 {summary.waitConfirmCount}</span>
+      {summary.failedCount > 0 && (
+        <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full text-[10px] text-white flex items-center justify-center"
+          style={{ background: '#DC2626', fontWeight: 700 }}>
+          {summary.failedCount}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function PendingListPanel({ pending, onResume }: {
+  pending: ProposalPendingListResponse;
+  onResume: (item: ProposalPendingItem) => void;
+}) {
+  const sections: Array<{ title: string; items: ProposalPendingItem[]; tone: string }> = [
+    { title: '处理中', items: pending.generating, tone: '#1A3D4A' },
+    { title: '待确认', items: pending.waitConfirm, tone: '#1A7A4A' },
+    { title: '失败', items: pending.failed, tone: '#DC2626' },
+  ];
+
+  return (
+    <div
+      className="absolute right-0 top-full mt-2 w-[360px] rounded-2xl overflow-hidden z-20"
+      style={{ background: 'white', border: '1px solid rgba(26,61,74,0.09)', boxShadow: '0 18px 48px rgba(26,61,74,0.16)' }}>
+      <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(26,61,74,0.07)', background: 'rgba(245,240,232,0.75)' }}>
+        <p className="text-sm text-[#1A3D4A]" style={{ fontWeight: 700 }}>提案处理中列表</p>
+      </div>
+      <div className="max-h-[420px] overflow-y-auto p-3 space-y-3" style={{ scrollbarWidth: 'thin' }}>
+        {sections.map(section => (
+          <div key={section.title}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs" style={{ color: section.tone, fontWeight: 700 }}>{section.title}</span>
+              <span className="text-[10px] text-[#9B9590]">{section.items.length} 条</span>
+            </div>
+            {section.items.length === 0 ? (
+              <div className="px-3 py-2 rounded-xl text-xs text-[#9B9590]" style={{ background: 'rgba(26,61,74,0.03)' }}>
+                暂无
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {section.items.map(item => (
+                  <button
+                    key={item.proposalId}
+                    onClick={() => onResume(item)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all hover:translate-y-[-1px]"
+                    style={{ background: 'rgba(26,61,74,0.03)', border: '1px solid rgba(26,61,74,0.06)' }}>
+                    {item.coverFileId ? (
+                      <img src={proposalFileUrl(item.coverFileId)} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'rgba(26,61,74,0.08)' }}>
+                        <Loader2 className="w-4 h-4 text-[#C4912A] animate-spin" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[#1A3D4A] truncate" style={{ fontWeight: 600 }}>{item.proposalTitle}</p>
+                      <p className="text-xs text-[#6B6558] mt-0.5">{item.clientName}</p>
+                      <p className="text-[11px] text-[#9B9590] mt-1">{item.imageCompleted}/{item.imageTotal} 张 · {fmtDateTime(item.updatedAt)}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-[#9B9590] flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProposalDirectionPreview({ direction, active, onOpen }: {
+  direction: ProposalDirectionDetail;
+  active?: boolean;
+  onOpen: () => void;
+}) {
+  const cfg = DIR_CFG[direction.directionCode];
+  const firstReady = direction.styleImages.find(image => !!image.fileId);
+  const cover = firstReady?.fileId ? proposalFileUrl(firstReady.fileId) : '';
+
+  return (
+    <div
+      className="rounded-2xl overflow-hidden flex flex-col"
+      style={{
+        border: active ? `2px solid ${cfg.color}` : '1px solid rgba(26,61,74,0.09)',
+        background: active ? cfg.light : 'white',
+        boxShadow: active ? `0 10px 28px ${cfg.color}22` : '0 1px 6px rgba(26,61,74,0.06)',
+      }}>
+      <div className="flex items-center justify-between px-3 py-2.5"
+        style={{ background: active ? cfg.light : 'rgba(26,61,74,0.03)', borderBottom: '1px solid rgba(26,61,74,0.06)' }}>
+        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: cfg.light, color: cfg.color, border: `1px solid ${cfg.border}`, fontWeight: 600 }}>
+          {direction.typeLabel}
+        </span>
+        <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs text-white" style={{ background: cfg.color, fontWeight: 700 }}>
+          {direction.directionLetter}
+        </span>
+      </div>
+      <div className="relative" style={{ height: 144, background: 'rgba(26,61,74,0.04)' }}>
+        {cover ? (
+          <img src={cover} alt={direction.directionName} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Loader2 className={`w-6 h-6 ${direction.directionStatus === 'FAILED' ? 'text-red-500' : 'text-[#C4912A]'} ${direction.directionStatus === 'GENERATING' ? 'animate-spin' : ''}`} />
+          </div>
+        )}
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.62) 0%, transparent 55%)' }} />
+        <div className="absolute left-3 right-3 bottom-3">
+          <p className="text-white text-sm truncate" style={{ fontWeight: 700 }}>{direction.directionName}</p>
+          <p className="text-[11px] text-white/80 mt-1">{direction.slotCompleted}/{direction.slotTotal} 张已完成</p>
+        </div>
+      </div>
+      <div className="p-3 space-y-2 flex-1">
+        <p className="text-[11px] text-[#6B6558] leading-relaxed">{direction.positioning}</p>
+        <div className="rounded-xl p-2.5" style={{ background: 'rgba(26,61,74,0.03)', border: '1px solid rgba(26,61,74,0.07)' }}>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+            {[
+              { label: '制作工艺', value: direction.craftTechnique },
+              { label: '复杂度', value: direction.complexityLabel },
+              { label: '主要材质', value: direction.material },
+              { label: '交付周期', value: direction.deliveryDays },
+            ].map(item => (
+              <div key={item.label}>
+                <p className="text-[9px] text-[#9B9590]">{item.label}</p>
+                <p className="text-[10px] text-[#1A3D4A]" style={{ fontWeight: 600 }}>{item.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-2 pt-2" style={{ borderTop: '1px solid rgba(26,61,74,0.07)' }}>
+            <span className="text-[9px] text-[#9B9590]">测算定价区间</span>
+            <span className="text-[11px] text-[#C4912A]" style={{ fontWeight: 700 }}>¥ {direction.estimatedPrice}</span>
+          </div>
+        </div>
+        {direction.failureMessage && <p className="text-[11px] text-red-600">{direction.failureMessage}</p>}
+      </div>
+      <div className="p-3 pt-0">
+        <button
+          onClick={onOpen}
+          className="w-full py-2 rounded-xl text-sm transition-all"
+          style={{ background: 'transparent', color: cfg.color, border: `1.5px solid ${cfg.color}`, fontWeight: 600 }}>
+          查看 4 种子风格
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProposalStyleSelectModal({ direction, proposalStatus, selectedStyleImageId, onClose, onSelect, onRegenerate }: {
+  direction: ProposalDirectionDetail;
+  proposalStatus: ProposalStatus;
+  selectedStyleImageId: string | null;
+  onClose: () => void;
+  onSelect: (styleImage: ProposalStyleImage) => void;
+  onRegenerate: (styleImage: ProposalStyleImage) => Promise<void>;
+}) {
+  const cfg = DIR_CFG[direction.directionCode];
+  const [busyStyleId, setBusyStyleId] = useState<string | null>(null);
+
+  const handleRegenerate = async (styleImage: ProposalStyleImage) => {
+    setBusyStyleId(styleImage.styleImageId);
+    try {
+      await onRegenerate(styleImage);
+    } finally {
+      setBusyStyleId(null);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-40 flex items-center justify-center p-6"
+      style={{ background: 'rgba(13,37,53,0.65)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}>
+      <motion.div initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
+        onClick={event => event.stopPropagation()}
+        className="w-full max-w-5xl rounded-3xl overflow-hidden"
+        style={{ background: 'white', boxShadow: '0 24px 80px rgba(13,37,53,0.3)' }}>
+        <div className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: '1px solid rgba(26,61,74,0.07)', background: 'rgba(245,240,232,0.8)' }}>
+          <div>
+            <p className="text-sm text-[#1A3D4A]" style={{ fontWeight: 700 }}>{direction.directionName}</p>
+            <p className="text-xs text-[#9B9590] mt-1">{direction.typeLabel} · {direction.slotCompleted}/{direction.slotTotal} 张已完成</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center text-[#6B6558] hover:bg-[rgba(26,61,74,0.06)] transition-all">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 grid grid-cols-2 gap-4">
+          {direction.styleImages.map(styleImage => {
+            const imageUrl = proposalFileUrl(styleImage.fileId);
+            const selectable = !!styleImage.fileId && (styleImage.slotStatus === 'SUCCESS' || styleImage.slotStatus === 'SELECTED');
+            const isBusy = busyStyleId === styleImage.styleImageId;
+            const isSelected = selectedStyleImageId === styleImage.styleImageId;
+            return (
+              <div key={styleImage.styleImageId}
+                className="rounded-2xl overflow-hidden"
+                style={{
+                  border: isSelected ? `2px solid ${cfg.color}` : '1px solid rgba(26,61,74,0.08)',
+                  background: isSelected ? cfg.light : 'white',
+                }}>
+                <div className="relative" style={{ height: 220, background: 'rgba(26,61,74,0.04)' }}>
+                  {imageUrl ? (
+                    <img src={imageUrl} alt={styleImage.styleName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 px-4 text-center">
+                      {styleImage.slotStatus === 'FAILED' ? (
+                        <>
+                          <AlertTriangle className="w-6 h-6 text-red-500" />
+                          <p className="text-xs text-red-600">{styleImage.failureMessage || '生成失败'}</p>
+                        </>
+                      ) : (
+                        <>
+                          <Loader2 className={`w-6 h-6 text-[#C4912A] ${styleImage.slotStatus === 'GENERATING' ? 'animate-spin' : ''}`} />
+                          <p className="text-xs text-[#6B6558]">{styleImage.slotStatus === 'GENERATING' ? '正在生成中' : '等待生成'}</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <div className="absolute top-3 left-3 text-[10px] px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(255,255,255,0.92)', color: '#1A3D4A', fontWeight: 700 }}>
+                    子风格 {styleImage.slotNo}
+                  </div>
+                </div>
+                <div className="p-3">
+                  <p className="text-sm text-[#1A3D4A]" style={{ fontWeight: 700 }}>{styleImage.styleName}</p>
+                  <p className="text-[11px] text-[#9B9590] mt-1 line-clamp-2">{styleImage.prompt}</p>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      disabled={!selectable}
+                      onClick={() => selectable && onSelect(styleImage)}
+                      className="flex-1 py-2 rounded-xl text-sm transition-all"
+                      style={{
+                        background: selectable ? `linear-gradient(135deg, ${cfg.color}, ${cfg.color}CC)` : 'rgba(26,61,74,0.08)',
+                        color: selectable ? 'white' : '#9B9590',
+                        fontWeight: 600,
+                      }}>
+                      {isSelected ? '已选中' : '选择此图'}
+                    </button>
+                    {(proposalStatus === 'WAIT_CONFIRM' || proposalStatus === 'FAILED') && (
+                      <button
+                        disabled={isBusy}
+                        onClick={() => handleRegenerate(styleImage)}
+                        className="px-3 py-2 rounded-xl text-sm transition-all"
+                        style={{ border: '1px solid rgba(26,61,74,0.12)', color: '#1A3D4A', fontWeight: 600 }}>
+                        {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function ProposalWizard({ clients, onAddClient, onDeleteClient, getClientProposalCount, onClose, onConfirmed, onSummaryRefresh, onClientsRefresh, resumeProposalId }: {
+  clients: CopilotClient[];
+  onAddClient: (name: string, phone: string, budget: string, address: string) => Promise<string>;
+  onDeleteClient: (id: string) => Promise<void>;
+  getClientProposalCount: (clientId: string) => number;
+  onClose: () => void;
+  onConfirmed: (proposal: Proposal) => void;
+  onSummaryRefresh: () => Promise<void> | void;
+  onClientsRefresh: () => Promise<void> | void;
+  resumeProposalId?: string | null;
+}) {
+  const [phase, setPhase] = useState<WizardPhase>(resumeProposalId ? 'generating' : 'client');
+  const [proposalId, setProposalId] = useState<string | null>(resumeProposalId ?? null);
+  const [detail, setDetail] = useState<ProposalDetailResponse | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState<boolean>(!!resumeProposalId);
+  const [submitting, setSubmitting] = useState(false);
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [clientSearch, setClientSearch] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedDirectionCode, setSelectedDirectionCode] = useState<string | null>(null);
+  const [selectedStyleImageId, setSelectedStyleImageId] = useState<string | null>(null);
+  const [styleModalDirection, setStyleModalDirection] = useState<ProposalDirectionDetail | null>(null);
+  const [ws, setWs] = useState<WizardState>({
+    selectedClientId: null,
+    newClientName: '',
+    newClientPhone: '',
+    newClientBudget: '',
+    newClientAddress: '',
+    purpose: '',
+    purposeCustom: '',
+    concern: '',
+    concernCustom: '',
+    style: '',
+    styleCustom: '',
+    elements: [],
+    elementsCustom: '',
+    targetProduct: '',
+    targetProductCustom: '',
+    generatedDirs: [],
+  });
+
+  const filteredClients = clients.filter(client => {
+    if (!clientSearch.trim()) return true;
+    const q = clientSearch.toLowerCase();
+    return client.name.toLowerCase().includes(q) || (client.phone ?? '').includes(q);
+  });
+
+  const selectedClient = clients.find(client => client.id === ws.selectedClientId);
+  const effectivePurpose = ws.purpose === '__other__' ? ws.purposeCustom : ws.purpose;
+  const effectiveConcern = ws.concern === '__other__' ? ws.concernCustom : ws.concern;
+  const effectiveStyle = ws.style === '__other__' ? ws.styleCustom : ws.style;
+  const effectiveTargetProduct = ws.targetProduct === '__other__' ? ws.targetProductCustom : ws.targetProduct;
+  const effectiveElements = ws.elements.includes('__other__')
+    ? [...ws.elements.filter(value => value !== '__other__'), ws.elementsCustom].filter(Boolean)
+    : ws.elements;
+  const canProceedClient = !!ws.selectedClientId || (showNewForm && !!ws.newClientName.trim());
+  const canProceedBrief = !!effectivePurpose && !!effectiveConcern && !!effectiveStyle && !!effectiveTargetProduct;
+
+  const hydrateFromDetail = useCallback((nextDetail: ProposalDetailResponse) => {
+    setDetail(nextDetail);
+    setSelectedDirectionCode(nextDetail.selectedDirectionCode ?? null);
+    setSelectedStyleImageId(nextDetail.selectedStyleImageId ?? null);
+    setWs(prev => ({
+      ...prev,
+      selectedClientId: nextDetail.customerId ?? prev.selectedClientId,
+      newClientName: nextDetail.clientName ?? prev.newClientName,
+      newClientPhone: nextDetail.clientPhone ?? prev.newClientPhone,
+      newClientBudget: nextDetail.clientBudget ?? prev.newClientBudget,
+      purpose: nextDetail.purpose ?? prev.purpose,
+      concern: nextDetail.concern ?? prev.concern,
+      style: nextDetail.style ?? prev.style,
+      elements: nextDetail.elements ?? prev.elements,
+      targetProduct: nextDetail.targetProducts?.[0] ?? prev.targetProduct,
+    }));
+    setPhase(nextDetail.status === 'GENERATING' ? 'generating' : 'review');
+  }, []);
+
+  const loadDetail = useCallback(async (targetProposalId: string, withLoading = false) => {
+    if (withLoading) setLoadingDetail(true);
+    try {
+      const nextDetail = await proposalService.getProposalDetail(targetProposalId);
+      hydrateFromDetail(nextDetail);
+      return nextDetail;
+    } finally {
+      if (withLoading) setLoadingDetail(false);
+    }
+  }, [hydrateFromDetail]);
+
+  useEffect(() => {
+    if (!resumeProposalId) return;
+    setProposalId(resumeProposalId);
+    void loadDetail(resumeProposalId, true).catch(error => {
+      toast.error(error instanceof Error ? error.message : '提案加载失败');
+      onClose();
+    });
+  }, [resumeProposalId, loadDetail, onClose]);
+
+  useEffect(() => {
+    if (!proposalId || phase !== 'generating') return;
+    const timer = window.setInterval(() => {
+      void loadDetail(proposalId).catch(() => {});
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [proposalId, phase, loadDetail]);
+
+  const handleGenerate = async () => {
+    const clientId = ws.selectedClientId ?? (showNewForm
+      ? await onAddClient(ws.newClientName.trim(), ws.newClientPhone.trim(), ws.newClientBudget.trim(), ws.newClientAddress.trim())
+      : '');
+    const client = clients.find(item => item.id === clientId);
+    const payload = {
+      customerId: clientId || undefined,
+      clientName: client?.name ?? ws.newClientName.trim(),
+      clientCompany: client?.company ?? '',
+      clientPhone: client?.phone ?? ws.newClientPhone.trim(),
+      clientBudget: client?.budget ?? ws.newClientBudget.trim(),
+      purpose: effectivePurpose,
+      concern: effectiveConcern,
+      style: effectiveStyle,
+      elements: effectiveElements,
+      targetProducts: effectiveTargetProduct ? [effectiveTargetProduct] : [],
+    };
+
+    setSubmitting(true);
+    try {
+      const created = await proposalService.createProposal(payload);
+      setProposalId(created.proposalId);
+      setPhase('generating');
+      toast.success('已开始生成 3 个方向');
+      await Promise.all([onSummaryRefresh(), onClientsRefresh()]);
+      await loadDetail(created.proposalId, true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '创建提案失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSelectStyle = (directionCode: string, styleImage: ProposalStyleImage) => {
+    setSelectedDirectionCode(directionCode);
+    setSelectedStyleImageId(styleImage.styleImageId);
+    setStyleModalDirection(null);
+  };
+
+  const handleRegenerateStyle = async (styleImage: ProposalStyleImage) => {
+    if (!proposalId || !styleModalDirection) return;
+    const nextDetail = await proposalService.regenerateSlot(proposalId, styleModalDirection.directionCode, styleImage.slotNo);
+    hydrateFromDetail(nextDetail);
+    setStyleModalDirection(nextDetail.directions.find(direction => direction.directionCode === styleModalDirection.directionCode) ?? null);
+    toast.success(`子风格 ${styleImage.slotNo} 已重新提交`);
+  };
+
+  const handleConfirm = async () => {
+    if (!proposalId || !selectedDirectionCode || !selectedStyleImageId) return;
+    try {
+      const card = await proposalService.confirmProposal(proposalId, {
+        directionCode: selectedDirectionCode,
+        styleImageId: selectedStyleImageId,
+      });
+      onConfirmed(mapBackendCardToProposal(card));
+      await onSummaryRefresh();
+      toast.success('提案已确认');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '提案确认失败');
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full" style={{ background: '#FAFAF8' }}>
+      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+        style={{ borderBottom: '1px solid rgba(26,61,74,0.07)', background: 'rgba(245,240,232,0.8)' }}>
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-[#C4912A]" />
+          <span className="text-[#1A3D4A]" style={{ fontSize: 15, fontWeight: 600 }}>
+            {proposalId ? '设计副驾 · 提案恢复' : '设计副驾 · 新建提案'}
+          </span>
+          {(submitting || loadingDetail) && <Loader2 className="w-4 h-4 text-[#C4912A] animate-spin" />}
+        </div>
+        <button onClick={onClose} className="w-8 h-8 rounded-xl flex items-center justify-center text-[#6B6558] hover:bg-[rgba(26,61,74,0.06)] transition-all">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-6 py-5" style={{ scrollbarWidth: 'thin' }}>
+        {loadingDetail ? (
+          <div className="h-full flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-[#C4912A] animate-spin" />
+          </div>
+        ) : phase === 'client' ? (
+          <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}>
+            <p className="text-xs text-[#9B9590] mb-4">选择客户 · 为谁做这份提案？</p>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3"
+              style={{ background: 'rgba(26,61,74,0.05)', border: '1px solid rgba(26,61,74,0.08)' }}>
+              <Search className="w-3.5 h-3.5 text-[#9B9590]" />
+              <input value={clientSearch} onChange={event => setClientSearch(event.target.value)} placeholder="搜索客户..."
+                className="flex-1 text-xs bg-transparent outline-none text-[#1A3D4A] placeholder:text-[#9B9590]" />
+            </div>
+            <div className="space-y-2 mb-4">
+              {filteredClients.map(client => {
+                const isSelected = ws.selectedClientId === client.id;
+                const isDeleting = deletingId === client.id;
+                return (
+                  <div key={client.id} className="rounded-2xl overflow-hidden"
+                    style={{ border: isSelected ? '1.5px solid rgba(196,145,42,0.35)' : '1.5px solid rgba(26,61,74,0.07)', background: isSelected ? 'rgba(196,145,42,0.04)' : 'white' }}>
+                    {!isDeleting ? (
+                      <div className="flex items-center gap-3 px-3 py-2.5 group">
+                        <button onClick={() => { setWs(prev => ({ ...prev, selectedClientId: client.id })); setShowNewForm(false); }} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-sm"
+                            style={{ background: isSelected ? '#1A3D4A' : 'rgba(26,61,74,0.08)', color: isSelected ? 'white' : '#1A3D4A', fontWeight: 700 }}>
+                            {client.name[0]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-[#1A3D4A] truncate" style={{ fontWeight: 600 }}>{client.name}</p>
+                            <p className="text-[10px] text-[#6B6558]">{client.company || client.phone || '未填写公司'}</p>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-[#C4912A] flex-shrink-0" />}
+                        </button>
+                        <button onClick={() => {
+                          const count = getClientProposalCount(client.id);
+                          if (count > 0) {
+                            toast.error(`客户「${client.name}」已绑定 ${count} 份提案，无法删除`);
+                          } else {
+                            setDeletingId(client.id);
+                          }
+                        }}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9B9590] hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3">
+                        <p className="text-xs text-red-600 mb-2">确认删除「{client.name}」？</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => setDeletingId(null)} className="flex-1 py-1.5 rounded-lg text-xs text-[#6B6558]" style={{ border: '1px solid rgba(26,61,74,0.12)' }}>取消</button>
+                          <button onClick={() => {
+                            void onDeleteClient(client.id)
+                              .then(() => {
+                                setDeletingId(null);
+                                if (ws.selectedClientId === client.id) {
+                                  setWs(prev => ({ ...prev, selectedClientId: null }));
+                                }
+                              })
+                              .catch(error => {
+                                toast.error(error instanceof Error ? error.message : '客户删除失败');
+                              });
+                          }} className="flex-1 py-1.5 rounded-lg text-xs text-white" style={{ background: '#DC2626' }}>删除</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={() => { setShowNewForm(value => !value); setWs(prev => ({ ...prev, selectedClientId: null })); }}
+              className="w-full py-2.5 rounded-xl text-sm mb-4"
+              style={{ background: 'rgba(196,145,42,0.08)', border: '1px dashed rgba(196,145,42,0.35)', color: '#C4912A', fontWeight: 600 }}>
+              {showNewForm ? '收起新客户表单' : '+ 新建客户并继续'}
+            </button>
+            {showNewForm && (
+              <div className="rounded-2xl p-4 space-y-2.5"
+                style={{ background: 'rgba(196,145,42,0.05)', border: '1.5px solid rgba(196,145,42,0.2)' }}>
+                <input value={ws.newClientName} onChange={event => setWs(prev => ({ ...prev, newClientName: event.target.value }))}
+                  placeholder="联系人姓名（必填）"
+                  className="w-full text-sm border border-[rgba(26,61,74,0.12)] rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-[#C4912A] text-[#1A3D4A]" />
+                <input value={ws.newClientPhone} onChange={event => setWs(prev => ({ ...prev, newClientPhone: event.target.value }))}
+                  placeholder="手机号（选填）"
+                  className="w-full text-sm border border-[rgba(26,61,74,0.12)] rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-[#C4912A] text-[#1A3D4A]" />
+                <input value={ws.newClientBudget} onChange={event => setWs(prev => ({ ...prev, newClientBudget: event.target.value }))}
+                  placeholder="预算范围（如：5-10万）"
+                  className="w-full text-sm border border-[rgba(26,61,74,0.12)] rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-[#C4912A] text-[#1A3D4A]" />
+                <input value={ws.newClientAddress} onChange={event => setWs(prev => ({ ...prev, newClientAddress: event.target.value }))}
+                  placeholder="联系地址（选填）"
+                  className="w-full text-sm border border-[rgba(26,61,74,0.12)] rounded-xl px-3 py-2 bg-white focus:outline-none focus:border-[#C4912A] text-[#1A3D4A]" />
+              </div>
+            )}
+          </motion.div>
+        ) : phase === 'brief' ? (
+          <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}>
+            <p className="text-xs text-[#9B9590] mb-4">简要需求 · 生成 3 个方向与每方向 4 张子风格图</p>
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-[#1A3D4A] mb-2" style={{ fontWeight: 600 }}>用途</p>
+                <div className="flex flex-wrap gap-2">
+                  {PURPOSES.map(item => {
+                    const active = ws.purpose === item;
+                    return (
+                      <button key={item} onClick={() => setWs(prev => ({ ...prev, purpose: active ? '' : item, purposeCustom: '' }))}
+                        className="px-3 py-1.5 rounded-xl text-sm"
+                        style={{ background: active ? '#1A3D4A' : 'white', color: active ? 'white' : '#1A3D4A', border: `1.5px solid ${active ? '#1A3D4A' : 'rgba(26,61,74,0.12)'}` }}>
+                        {item}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setWs(prev => ({ ...prev, purpose: prev.purpose === '__other__' ? '' : '__other__', purposeCustom: '' }))}
+                    className="px-3 py-1.5 rounded-xl text-sm"
+                    style={{ background: ws.purpose === '__other__' ? 'rgba(196,145,42,0.12)' : 'white', color: '#C4912A', border: `1.5px solid ${ws.purpose === '__other__' ? '#C4912A' : 'rgba(196,145,42,0.25)'}` }}>
+                    其他…
+                  </button>
+                </div>
+                {ws.purpose === '__other__' && <OtherInput value={ws.purposeCustom} onChange={value => setWs(prev => ({ ...prev, purposeCustom: value }))} />}
+              </div>
+              <div>
+                <p className="text-xs text-[#1A3D4A] mb-2" style={{ fontWeight: 600 }}>客户关注点</p>
+                <div className="flex flex-wrap gap-2">
+                  {CONCERNS.map(item => {
+                    const active = ws.concern === item;
+                    return (
+                      <button key={item} onClick={() => setWs(prev => ({ ...prev, concern: active ? '' : item, concernCustom: '' }))}
+                        className="px-3 py-1.5 rounded-xl text-sm"
+                        style={{ background: active ? '#1A3D4A' : 'white', color: active ? 'white' : '#1A3D4A', border: `1.5px solid ${active ? '#1A3D4A' : 'rgba(26,61,74,0.12)'}` }}>
+                        {item}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setWs(prev => ({ ...prev, concern: prev.concern === '__other__' ? '' : '__other__', concernCustom: '' }))}
+                    className="px-3 py-1.5 rounded-xl text-sm"
+                    style={{ background: ws.concern === '__other__' ? 'rgba(196,145,42,0.12)' : 'white', color: '#C4912A', border: `1.5px solid ${ws.concern === '__other__' ? '#C4912A' : 'rgba(196,145,42,0.25)'}` }}>
+                    其他…
+                  </button>
+                </div>
+                {ws.concern === '__other__' && <OtherInput value={ws.concernCustom} onChange={value => setWs(prev => ({ ...prev, concernCustom: value }))} />}
+              </div>
+              <div>
+                <p className="text-xs text-[#1A3D4A] mb-2" style={{ fontWeight: 600 }}>整体风格</p>
+                <div className="flex flex-wrap gap-2">
+                  {STYLES.map(item => {
+                    const active = ws.style === item;
+                    return (
+                      <button key={item} onClick={() => setWs(prev => ({ ...prev, style: active ? '' : item, styleCustom: '' }))}
+                        className="px-3 py-1.5 rounded-xl text-sm"
+                        style={{ background: active ? '#1A3D4A' : 'white', color: active ? 'white' : '#1A3D4A', border: `1.5px solid ${active ? '#1A3D4A' : 'rgba(26,61,74,0.12)'}` }}>
+                        {item}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setWs(prev => ({ ...prev, style: prev.style === '__other__' ? '' : '__other__', styleCustom: '' }))}
+                    className="px-3 py-1.5 rounded-xl text-sm"
+                    style={{ background: ws.style === '__other__' ? 'rgba(196,145,42,0.12)' : 'white', color: '#C4912A', border: `1.5px solid ${ws.style === '__other__' ? '#C4912A' : 'rgba(196,145,42,0.25)'}` }}>
+                    其他…
+                  </button>
+                </div>
+                {ws.style === '__other__' && <OtherInput value={ws.styleCustom} onChange={value => setWs(prev => ({ ...prev, styleCustom: value }))} />}
+              </div>
+              <div>
+                <p className="text-xs text-[#1A3D4A] mb-2" style={{ fontWeight: 600 }}>核心元素</p>
+                <div className="flex flex-wrap gap-2">
+                  {ELEMENTS.map(item => {
+                    const active = ws.elements.includes(item);
+                    return (
+                      <button key={item} onClick={() => setWs(prev => ({ ...prev, elements: active ? prev.elements.filter(value => value !== item) : [...prev.elements, item] }))}
+                        className="px-3 py-1.5 rounded-xl text-sm"
+                        style={{ background: active ? '#1A3D4A' : 'white', color: active ? 'white' : '#1A3D4A', border: `1.5px solid ${active ? '#1A3D4A' : 'rgba(26,61,74,0.12)'}` }}>
+                        {item}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-[#1A3D4A] mb-2" style={{ fontWeight: 600 }}>目标品类</p>
+                <div className="flex flex-wrap gap-2">
+                  {PRODUCTS.map(item => {
+                    const active = ws.targetProduct === item;
+                    return (
+                      <button key={item} onClick={() => setWs(prev => ({ ...prev, targetProduct: active ? '' : item, targetProductCustom: '' }))}
+                        className="px-3 py-1.5 rounded-xl text-sm"
+                        style={{ background: active ? '#1A3D4A' : 'white', color: active ? 'white' : '#1A3D4A', border: `1.5px solid ${active ? '#1A3D4A' : 'rgba(26,61,74,0.12)'}` }}>
+                        {item}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setWs(prev => ({ ...prev, targetProduct: prev.targetProduct === '__other__' ? '' : '__other__', targetProductCustom: '' }))}
+                    className="px-3 py-1.5 rounded-xl text-sm"
+                    style={{ background: ws.targetProduct === '__other__' ? 'rgba(196,145,42,0.12)' : 'white', color: '#C4912A', border: `1.5px solid ${ws.targetProduct === '__other__' ? '#C4912A' : 'rgba(196,145,42,0.25)'}` }}>
+                    其他…
+                  </button>
+                </div>
+                {ws.targetProduct === '__other__' && <OtherInput value={ws.targetProductCustom} onChange={value => setWs(prev => ({ ...prev, targetProductCustom: value }))} />}
+              </div>
+            </div>
+          </motion.div>
+        ) : phase === 'generating' && detail ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+            <div className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid rgba(26,61,74,0.08)' }}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(196,145,42,0.12)' }}>
+                  <Loader2 className="w-6 h-6 text-[#C4912A] animate-spin" />
+                </div>
+                <div>
+                  <p className="text-[#1A3D4A]" style={{ fontWeight: 700 }}>正在生成提案方向</p>
+                  <p className="text-xs text-[#9B9590] mt-1">3 个方向 / 12 张子风格图</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-sm mb-2">
+                <span className="text-[#1A3D4A]" style={{ fontWeight: 600 }}>已完成 {detail.progress.imageCompleted}/{detail.progress.imageTotal} 张</span>
+                <span className="text-[#9B9590]">方向 {detail.progress.directionCompleted}/{detail.progress.directionTotal}</span>
+              </div>
+              <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(26,61,74,0.08)' }}>
+                <div className="h-full" style={{ width: `${(detail.progress.imageCompleted / detail.progress.imageTotal) * 100}%`, background: 'linear-gradient(90deg, #C4912A, #1A3D4A)' }} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {detail.directions.map(direction => (
+                <ProposalDirectionPreview key={direction.directionCode} direction={direction} onOpen={() => setStyleModalDirection(direction)} />
+              ))}
+            </div>
+          </motion.div>
+        ) : detail ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+            <div className="rounded-2xl p-4" style={{ background: 'white', border: '1px solid rgba(26,61,74,0.08)' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[#1A3D4A]" style={{ fontWeight: 700 }}>
+                    {detail.status === 'FAILED' ? '部分子风格图生成失败' : '方向与子风格图已生成完成'}
+                  </p>
+                  <p className="text-xs text-[#9B9590] mt-1">
+                    请选择 1 个方向，并在该方向下确认 1 张最终子风格图
+                  </p>
+                </div>
+                <span className="text-xs px-2.5 py-1 rounded-full"
+                  style={{ background: detail.status === 'FAILED' ? 'rgba(239,68,68,0.08)' : 'rgba(26,122,74,0.08)', color: detail.status === 'FAILED' ? '#DC2626' : '#1A7A4A', fontWeight: 700 }}>
+                  {detail.progress.imageCompleted}/{detail.progress.imageTotal}
+                </span>
+              </div>
+              {selectedDirectionCode && selectedStyleImageId && (
+                <p className="text-xs text-[#C4912A] mt-3" style={{ fontWeight: 600 }}>
+                  已选择方向 {selectedDirectionCode.toUpperCase()} · 子风格图已锁定，确认后进入工作台
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {detail.directions.map(direction => (
+                <ProposalDirectionPreview
+                  key={direction.directionCode}
+                  direction={direction}
+                  active={selectedDirectionCode === direction.directionCode}
+                  onOpen={() => setStyleModalDirection(direction)}
+                />
+              ))}
+            </div>
+          </motion.div>
+        ) : null}
+      </div>
+
+      <div className="px-6 py-4 flex-shrink-0" style={{ borderTop: '1px solid rgba(26,61,74,0.07)', background: 'rgba(245,240,232,0.8)' }}>
+        {phase === 'client' && (
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm text-[#6B6558]" style={{ border: '1px solid rgba(26,61,74,0.12)' }}>取消</button>
+            <button onClick={() => setPhase('brief')} disabled={!canProceedClient}
+              className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2"
+              style={{ background: canProceedClient ? 'linear-gradient(135deg, #1A3D4A, #2A5568)' : 'rgba(26,61,74,0.1)', color: canProceedClient ? 'white' : '#9B9590' }}>
+              <Check className="w-4 h-4" /> 已选定客户，下一步
+            </button>
+          </div>
+        )}
+        {phase === 'brief' && (
+          <div className="flex gap-3">
+            <button onClick={() => setPhase('client')} className="px-4 py-2.5 rounded-xl text-sm text-[#6B6558]" style={{ border: '1px solid rgba(26,61,74,0.12)' }}>
+              <ChevronLeft className="w-4 h-4 inline mr-1" /> 上一步
+            </button>
+            <button onClick={handleGenerate} disabled={!canProceedBrief || submitting}
+              className="flex-1 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2"
+              style={{ background: canProceedBrief ? 'linear-gradient(135deg, #C4912A, #A87920)' : 'rgba(26,61,74,0.1)', color: canProceedBrief ? 'white' : '#9B9590' }}>
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />} AI 生成方向
+            </button>
+          </div>
+        )}
+        {phase === 'generating' && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#9B9590]">关闭当前页不会中断后端生成，可在工作台顶部继续恢复</span>
+            <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-[#1A3D4A]" style={{ border: '1px solid rgba(26,61,74,0.12)' }}>
+              暂时关闭
+            </button>
+          </div>
+        )}
+        {phase === 'review' && detail && (
+          <button onClick={handleConfirm}
+            disabled={detail.status !== 'WAIT_CONFIRM' || !selectedDirectionCode || !selectedStyleImageId}
+            className="w-full py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all"
+            style={{
+              background: detail.status === 'WAIT_CONFIRM' && selectedDirectionCode && selectedStyleImageId
+                ? 'linear-gradient(135deg, #1A3D4A, #2A5568)'
+                : 'rgba(26,61,74,0.1)',
+              color: detail.status === 'WAIT_CONFIRM' && selectedDirectionCode && selectedStyleImageId ? 'white' : '#9B9590',
+              fontWeight: 600,
+            }}>
+            <Send className="w-4 h-4" /> 确认生成提案
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {styleModalDirection && detail && (
+          <ProposalStyleSelectModal
+            direction={styleModalDirection}
+            proposalStatus={detail.status}
+            selectedStyleImageId={selectedStyleImageId}
+            onClose={() => setStyleModalDirection(null)}
+            onSelect={styleImage => handleSelectStyle(styleModalDirection.directionCode, styleImage)}
+            onRegenerate={handleRegenerateStyle}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── Proposal Card (Grid View) ─────────────────────────────────────────────────
 
 function ProposalCard({ proposal, onEdit, onDelete }: {
@@ -1451,18 +2356,22 @@ function ProposalCard({ proposal, onEdit, onDelete }: {
                   style={{ background: 'rgba(196,145,42,0.09)', border: '1px solid rgba(196,145,42,0.25)', color: '#A8741A', fontWeight: 500 }}>
                   <FileText className="w-2.5 h-2.5" /> 导出PDF
                 </button>
-                <button onClick={e => { e.stopPropagation(); onEdit(); }}
-                  className="w-6 h-6 rounded-md flex items-center justify-center transition-all hover:scale-105"
-                  style={{ background: 'rgba(196,145,42,0.1)', color: '#C4912A' }}
-                  title="编辑提案">
-                  <Pencil className="w-2.5 h-2.5" />
-                </button>
-                <button onClick={e => { e.stopPropagation(); setConfirmingDelete(true); }}
-                  className="w-6 h-6 rounded-md flex items-center justify-center transition-all hover:scale-105"
-                  style={{ background: 'rgba(239,68,68,0.09)', color: '#DC2626' }}
-                  title="删除提案">
-                  <Trash2 className="w-2.5 h-2.5" />
-                </button>
+                {!proposal.readonly && (
+                  <button onClick={e => { e.stopPropagation(); onEdit(); }}
+                    className="w-6 h-6 rounded-md flex items-center justify-center transition-all hover:scale-105"
+                    style={{ background: 'rgba(196,145,42,0.1)', color: '#C4912A' }}
+                    title="编辑提案">
+                    <Pencil className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {!proposal.readonly && (
+                  <button onClick={e => { e.stopPropagation(); setConfirmingDelete(true); }}
+                    className="w-6 h-6 rounded-md flex items-center justify-center transition-all hover:scale-105"
+                    style={{ background: 'rgba(239,68,68,0.09)', color: '#DC2626' }}
+                    title="删除提案">
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1481,13 +2390,90 @@ function ProposalCard({ proposal, onEdit, onDelete }: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function DesignCopilotPage() {
-  const { clearRedDot, persistentClients, setPersistentClients, addCopilotProposal } = useApp();
-  const [proposals, setProposals] = useState<Proposal[]>(SEED_PROPOSALS);
+  const { clearRedDot, setPersistentClients, addCopilotProposal } = useApp();
+  const [clients, setClients] = useState<CopilotClient[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [listSearch, setListSearch] = useState('');
   const [showWizard, setShowWizard] = useState(false);
   const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
+  const [resumeProposalId, setResumeProposalId] = useState<string | null>(null);
+  const [pendingSummary, setPendingSummary] = useState<ProposalPendingSummaryResponse>(EMPTY_PENDING_SUMMARY);
+  const [pendingList, setPendingList] = useState<ProposalPendingListResponse>(EMPTY_PENDING_LIST);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   useEffect(() => { clearRedDot('copilot'); }, []);
+
+  const refreshClients = useCallback(async () => {
+    const items = await customerService.listCustomers();
+    const mapped = items.map(mapCustomerToCopilotClient);
+    setClients(mapped);
+    setPersistentClients(mapped);
+  }, [setPersistentClients]);
+
+  const refreshPendingSummary = useCallback(async () => {
+    try {
+      const summary = await proposalService.getPendingSummary();
+      setPendingSummary(summary);
+    } catch {
+      setPendingSummary(EMPTY_PENDING_SUMMARY);
+    }
+  }, []);
+
+  const refreshPendingList = useCallback(async () => {
+    try {
+      const list = await proposalService.getPendingList();
+      setPendingList(list);
+    } catch {
+      setPendingList(EMPTY_PENDING_LIST);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshClients()
+      .catch(() => {
+        if (cancelled) return;
+        setClients([]);
+        setPersistentClients([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshClients, setPersistentClients]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void proposalService.listConfirmedProposals()
+      .then(cards => {
+        if (cancelled) return;
+        const mapped = cards.map(mapBackendCardToProposal);
+        setProposals(mapped);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (showWizard) return;
+    void refreshPendingSummary();
+    const timer = window.setInterval(() => {
+      void refreshPendingSummary();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [showWizard, refreshPendingSummary]);
+
+  useEffect(() => {
+    if (!pendingOpen || showWizard) return;
+    void refreshPendingList();
+    const timer = window.setInterval(() => {
+      void refreshPendingList();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [pendingOpen, showWizard, refreshPendingList]);
 
   const filtered = proposals.filter(p => {
     if (listSearch.trim()) {
@@ -1506,24 +2492,29 @@ export function DesignCopilotPage() {
     toast.success('提案已删除');
   };
 
-  const handleAddClient = (name: string, phone: string, budget: string, address: string): string => {
-    const id = `c_${Date.now()}`;
-    setPersistentClients(prev => [{ id, name, company:'', industry:'', phone, intent:'中意向', stage:'待接触', budget, notes:address, lastContactAt:now8() }, ...prev]);
+  const handleAddClient = async (name: string, phone: string, budget: string, address: string): Promise<string> => {
+    const created = await customerService.createCustomer({
+      name,
+      phone,
+      budget,
+      notes: address,
+    });
+    const mapped = mapCustomerToCopilotClient(created);
+    setClients(prev => [mapped, ...prev.filter(item => item.id !== mapped.id)]);
+    setPersistentClients(prev => [mapped, ...prev.filter(item => item.id !== mapped.id)]);
     toast.success(`客户「${name}」已创建`);
-    return id;
+    return mapped.id;
   };
 
-  const handleDeleteClient = (id: string) => {
-    const cnt = proposals.filter(p => p.clientId === id).length;
-    if (cnt > 0) {
-      toast.error('无法删除该客户', { description: `该客户已绑定 ${cnt} 份提案，请先删除关联提案` });
-      return;
-    }
+  const handleDeleteClient = async (id: string) => {
+    await customerService.deleteCustomer(id);
+    setClients(prev => prev.filter(c => c.id !== id));
     setPersistentClients(prev => prev.filter(c => c.id !== id));
     toast.success('客户已删除');
   };
 
-  const getClientProposalCount = (clientId: string) => proposals.filter(p => p.clientId === clientId).length;
+  const getClientProposalCount = (clientId: string) =>
+    clients.find(client => client.id === clientId)?.proposalCount ?? proposals.filter(p => p.clientId === clientId).length;
 
   const handleWizardComplete = (data: WizardState & { clientId: string; clientName: string; confirmedDirectionId: string; confirmedPattern: LockedPattern }) => {
     const effectivePurpose  = data.purpose === '__other__' ? data.purposeCustom : data.purpose;
@@ -1534,12 +2525,12 @@ export function DesignCopilotPage() {
       : data.elements;
     const effectiveTarget   = data.targetProduct === '__other__' ? data.targetProductCustom : data.targetProduct;
     const confirmedDir = data.generatedDirs.find(d => d.id === data.confirmedDirectionId)!;
-    const clientCompany = persistentClients.find(c => c.id === data.clientId)?.company ?? '';
+    const clientCompany = clients.find(c => c.id === data.clientId)?.company ?? '';
 
     const newProposal: Proposal = {
       id:`prop_${Date.now()}`, clientId:data.clientId, clientName:data.clientName, clientCompany,
       title:`${effectivePurpose}提案`,
-      clientBudget: data.newClientBudget?.trim() || persistentClients.find(c => c.id === data.clientId)?.budget || '',
+      clientBudget: data.newClientBudget?.trim() || clients.find(c => c.id === data.clientId)?.budget || '',
       purpose:effectivePurpose, concern:effectiveConcern, style:effectiveStyle,
       elements:effectiveElements, targetProducts: effectiveTarget ? [effectiveTarget] : [],
       directions:data.generatedDirs,
@@ -1566,6 +2557,9 @@ export function DesignCopilotPage() {
   const handleEditUpdate = (id: string, patch: Partial<Proposal>, clientPatch?: { name: string; phone: string; budget: string; address: string }) => {
     updateProposal(id, patch);
     if (clientPatch && patch.clientId) {
+      setClients(prev => prev.map(c =>
+        c.id === patch.clientId ? { ...c, name: clientPatch.name, phone: clientPatch.phone, budget: clientPatch.budget, notes: clientPatch.address } : c
+      ));
       setPersistentClients(prev => prev.map(c =>
         c.id === patch.clientId ? { ...c, name: clientPatch.name, phone: clientPatch.phone, budget: clientPatch.budget, notes: clientPatch.address } : c
       ));
@@ -1575,32 +2569,65 @@ export function DesignCopilotPage() {
     toast.success('提案已更新');
   };
 
+  const handleCloseWizard = useCallback(() => {
+    setShowWizard(false);
+    setEditingProposalId(null);
+    setResumeProposalId(null);
+    void refreshPendingSummary();
+  }, [refreshPendingSummary]);
+
   const handleStartEdit = (proposalId: string) => {
+    setPendingOpen(false);
+    setResumeProposalId(null);
     setEditingProposalId(proposalId);
     setShowWizard(true);
+  };
+
+  const handleNewProposal = () => {
+    setPendingOpen(false);
+    setEditingProposalId(null);
+    setResumeProposalId(null);
+    setShowWizard(true);
+  };
+
+  const handleResumePending = (item: ProposalPendingItem) => {
+    setPendingOpen(false);
+    setEditingProposalId(null);
+    setResumeProposalId(item.proposalId);
+    setShowWizard(true);
+  };
+
+  const handleConfirmedProposal = (proposal: Proposal) => {
+    setProposals(prev => {
+      const next = prev.filter(item => item.id !== proposal.id);
+      return [proposal, ...next];
+    });
+    addCopilotProposal({
+      id: proposal.id,
+      clientId: proposal.clientId,
+      title: proposal.title,
+      clientName: proposal.clientName,
+      clientCompany: proposal.clientCompany,
+      directionType: proposal.directions.find(direction => direction.id === proposal.selectedDirectionId)?.typeLabel ?? '',
+      summary: proposal.purpose,
+      patterns: proposal.lockedPattern ? [proposal.lockedPattern.name] : [],
+      products: proposal.targetProducts,
+      budget: proposal.directions.find(direction => direction.id === proposal.selectedDirectionId)?.estimatedPrice ?? '',
+      addedAt: proposal.addedAt,
+      status: 'draft',
+      patternImageUrl: proposal.lockedPattern?.imageUrl,
+      patternTitle: proposal.lockedPattern?.name,
+    });
+    setShowWizard(false);
+    setResumeProposalId(null);
+    setEditingProposalId(null);
   };
 
   return (
     <div className="flex flex-col h-full" style={{ background: '#F5F0E8' }}>
 
       {/* ── Top header bar ── */}
-      {showWizard ? (
-        <div className="px-6 py-3 flex items-center gap-3 flex-shrink-0"
-          style={{ background: 'rgba(245,240,232,0.95)', borderBottom: '1px solid rgba(26,61,74,0.07)' }}>
-          <button
-            onClick={() => { setShowWizard(false); setEditingProposalId(null); }}
-            className="flex items-center gap-1.5 text-sm text-[#6B6558] hover:text-[#1A3D4A] transition-colors">
-            <ChevronLeft className="w-4 h-4" /> 返回列表
-          </button>
-          <span className="text-[rgba(26,61,74,0.22)]">·</span>
-          <div className="flex items-center gap-1.5">
-            <FileText className="w-3.5 h-3.5 text-[#C4912A]" />
-            <span className="text-sm text-[#1A3D4A]" style={{ fontWeight: 600 }}>
-              {editingProposalId ? '编辑提案' : '新建提案'}
-            </span>
-          </div>
-        </div>
-      ) : (
+      {!showWizard && (
         <div className="flex-shrink-0 px-6 py-4"
           style={{ background: 'rgba(245,240,232,0.95)', borderBottom: '1px solid rgba(26,61,74,0.07)' }}>
           <div className="flex items-start justify-between mb-3">
@@ -1612,12 +2639,30 @@ export function DesignCopilotPage() {
               </div>
               <p className="text-xs text-[#9B9590] mt-0.5">将模糊客户需求转化为可成交方案，每一份提案都是一次精准成交</p>
             </div>
-            <button
-              onClick={() => { setShowWizard(true); setEditingProposalId(null); }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm text-white flex-shrink-0 transition-all"
-              style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
-              <Plus className="w-4 h-4" /> 新建提案
-            </button>
+            <div className="relative flex items-center gap-3">
+              <PendingSummaryButton
+                summary={pendingSummary}
+                onClick={() => {
+                  const nextOpen = !pendingOpen;
+                  setPendingOpen(nextOpen);
+                  if (!pendingOpen) {
+                    void refreshPendingList();
+                  }
+                }}
+              />
+              {pendingOpen && (
+                <PendingListPanel
+                  pending={pendingList}
+                  onResume={handleResumePending}
+                />
+              )}
+              <button
+                onClick={handleNewProposal}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm text-white flex-shrink-0 transition-all"
+                style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
+                <Plus className="w-4 h-4" /> 新建提案
+              </button>
+            </div>
           </div>
           {/* search bar removed per UX review */}
         </div>
@@ -1632,16 +2677,30 @@ export function DesignCopilotPage() {
             <motion.div key="wizard"
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
               className="h-full overflow-hidden">
-              <CreateWizard
-                clients={persistentClients}
-                onAddClient={handleAddClient}
-                onDeleteClient={handleDeleteClient}
-                getClientProposalCount={getClientProposalCount}
-                onComplete={handleWizardComplete}
-                onClose={() => { setShowWizard(false); setEditingProposalId(null); }}
-                editingProposal={editingProposal}
-                onUpdate={handleEditUpdate}
-              />
+              {editingProposal ? (
+                <LegacyCreateWizard
+                  clients={clients}
+                  onAddClient={handleAddClient}
+                  onDeleteClient={handleDeleteClient}
+                  getClientProposalCount={getClientProposalCount}
+                  onComplete={handleWizardComplete}
+                  onClose={handleCloseWizard}
+                  editingProposal={editingProposal}
+                  onUpdate={handleEditUpdate}
+                />
+              ) : (
+                <ProposalWizard
+                  clients={clients}
+                  onAddClient={handleAddClient}
+                  onDeleteClient={handleDeleteClient}
+                  getClientProposalCount={getClientProposalCount}
+                  onClose={handleCloseWizard}
+                  onConfirmed={handleConfirmedProposal}
+                  onSummaryRefresh={refreshPendingSummary}
+                  onClientsRefresh={refreshClients}
+                  resumeProposalId={resumeProposalId}
+                />
+              )}
             </motion.div>
 
           /* Card grid */
@@ -1664,7 +2723,7 @@ export function DesignCopilotPage() {
                       : '提案不是展示页，而是把模糊需求变成可成交方案的中间决策界面'}
                   </p>
                   {!listSearch && (
-                    <button onClick={() => setShowWizard(true)}
+                    <button onClick={handleNewProposal}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm text-white"
                       style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}>
                       <Plus className="w-4 h-4" /> 新建第一份提案
