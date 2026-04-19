@@ -5,9 +5,9 @@ import { mockProposals, Proposal, mockDesignDirections } from '../data/mockData'
 import { ProtectedImage } from '../components/ProtectedImage';
 import {
   Search, Plus, ChevronRight, ChevronLeft, X, User, MapPin, Phone,
-  DollarSign, Clock, CheckCircle2, AlertCircle, Star, FileText,
-  Send, Calendar, Package, Shield, Zap, Eye, Edit2, Maximize2,
-  Minimize2, ArrowRight, TrendingUp, Tag, ChevronUp, ChevronDown,
+  DollarSign, CheckCircle2, Star, 
+  Package, Shield, Eye, Edit2, Maximize2,
+  Minimize2, ArrowRight, 
   Download
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -622,33 +622,7 @@ export function ProposalPage() {
     setRedDot('proposals', 1);
   };
 
-  const handleAdvanceStatus = async (proposal: Proposal) => {
-    const currentIdx = STATUS_FLOW.indexOf(proposal.status);
-    if (currentIdx === -1 || currentIdx >= STATUS_FLOW.length - 1) {
-      toast.info(t('当前状态已是终态', 'Already at final status'));
-      return;
-    }
-    const nextStatus = STATUS_FLOW[currentIdx + 1] as Proposal['status'];
-    const nextConf = STATUS_CONFIG[nextStatus];
-    setStatusUpdating(true);
-    await new Promise(r => setTimeout(r, 800));
-    setStatusUpdating(false);
-    setProposals(prev => prev.map(p => p.id === proposal.id ? { ...p, status: nextStatus, updatedAt: '刚刚' } : p));
-    if (selectedProposal?.id === proposal.id) {
-      setSelectedProposal(prev => prev ? { ...prev, status: nextStatus, updatedAt: '刚刚' } : null);
-    }
-    toast.success(t(`提案状态已推进至「${nextConf.label}」`, `Status advanced to "${nextConf.labelEn}"`), {
-      description: t('操作已记录日志', 'Operation logged'),
-    });
-  };
 
-  const handleMarkLost = (proposal: Proposal) => {
-    setProposals(prev => prev.map(p => p.id === proposal.id ? { ...p, status: 'lost', updatedAt: '刚刚' } : p));
-    if (selectedProposal?.id === proposal.id) {
-      setSelectedProposal(prev => prev ? { ...prev, status: 'lost', updatedAt: '刚刚' } : null);
-    }
-    toast.info(t('提案已标记为丢单', 'Proposal marked as lost'));
-  };
 
   const handleEditSave = (id: string, data: Partial<Proposal>) => {
     setProposals(prev => prev.map(p => p.id === id ? { ...p, ...data, updatedAt: '刚刚' } : p));
