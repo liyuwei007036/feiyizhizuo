@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { ProtectedImage } from '../components/ProtectedImage';
+import { marketService, type MarketDashboard } from '../services/marketService';
 import {
   Search, X, ZoomIn, Clock, FileText, User, ChevronDown,
   ShieldCheck, Award, Check, Lock, Sparkles, Brain, FolderUp,
@@ -400,7 +403,7 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
       onClick={onClose}>
       <motion.div initial={{ scale: 0.88 }} animate={{ scale: 1 }} exit={{ scale: 0.88 }}
         className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-        <img src={src} alt="" className="w-full rounded-2xl shadow-2xl" style={{ maxHeight: '82vh', objectFit: 'contain' }} />
+        <ProtectedImage src={src} alt="" className="w-full rounded-2xl shadow-2xl" style={{ maxHeight: '82vh', objectFit: 'contain' }} />
         <button onClick={onClose} className="absolute -top-3 -right-3 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-xl">
           <X className="w-4 h-4 text-[#1A3D4A]" />
         </button>
@@ -647,7 +650,7 @@ function CertViewModal({ pattern, certType, onClose }: {
           <div className="px-6 py-4 space-y-3">
             {/* Thumbnail + cert no */}
             <div className="flex gap-4 items-start">
-              <img src={pattern.imageUrl} alt={pattern.title}
+              <ProtectedImage src={pattern.imageUrl} alt={pattern.title}
                 className="w-20 h-20 object-cover rounded-xl flex-shrink-0"
                 style={{ border: '1.5px solid rgba(196,145,42,0.3)' }} />
               <div className="flex-1 min-w-0">
@@ -746,7 +749,7 @@ function MarketPatternCard({
 
         {/* Image */}
         <div className="relative overflow-hidden group flex-shrink-0" style={{ height: 130 }}>
-          <img src={pattern.imageUrl} alt={pattern.title}
+          <ProtectedImage src={pattern.imageUrl} alt={pattern.title}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
           {/* Gradient overlay */}
           <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.75) 0%, rgba(13,37,53,0.05) 60%, transparent 100%)' }} />
@@ -903,7 +906,7 @@ function PatternDetailPanel({
         <div className="flex-1 overflow-y-auto px-5 py-4" style={{ scrollbarWidth: 'thin' }}>
           {/* Image */}
           <div className="relative rounded-xl overflow-hidden mb-4 group" style={{ height: 200 }}>
-            <img src={pattern.imageUrl} alt={pattern.title} className="w-full h-full object-cover" />
+            <ProtectedImage src={pattern.imageUrl} alt={pattern.title} className="w-full h-full object-cover" />
             <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.6) 0%, transparent 60%)' }} />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ opacity: 0.15 }}>
               <span className="text-white text-lg rotate-[-30deg] select-none" style={{ fontWeight: 700 }}>锦绣智织水印</span>
@@ -1095,7 +1098,7 @@ function LicenseInputField({ label, value, onChange, placeholder, required, erro
 
 function LicenseApplyDrawer({
   pattern, onClose, onSubmit,
-}: { pattern: MarketPattern; onClose: () => void; onSubmit: (data: Partial<LicenseOrder>) => void; }) {
+}: { pattern: MarketPattern; onClose: () => void; onSubmit: (data: Partial<LicenseOrder>) => Promise<void> | void; }) {
   const [template, setTemplate] = useState<LicenseTemplate>(pattern.licenses[0].type);
   const [entity, setEntity] = useState('');
   const [purpose, setPurpose] = useState('');
@@ -1106,6 +1109,7 @@ function LicenseApplyDrawer({
   const [projectName, setProjectName] = useState('');
   const [quantityLimit, setQuantityLimit] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   const selectedLicense = pattern.licenses.find(l => l.type === template) ?? pattern.licenses[0];
 
@@ -1122,25 +1126,30 @@ function LicenseApplyDrawer({
     return Object.keys(e).length === 0;
   };
 
-  const canSubmit = entity && purpose && productCategory && channel && region &&
+  const canSubmit = Boolean(entity && purpose && productCategory && channel && region &&
     (template !== 'project' || projectName) &&
-    (template !== 'limited' || quantityLimit);
+    (template !== 'limited' || quantityLimit));
 
-  const handleSubmit = () => {
-    if (!validate()) return;
-    onSubmit({
-      template, templateLabel: selectedLicense.label,
-      entity, purpose, productCategory, channel, region,
-      allowDerivative, projectName, quantityLimit: quantityLimit ? parseInt(quantityLimit) : undefined,
-      price: selectedLicense.price,
-    });
+  const handleSubmit = async () => {
+    if (submitting || !validate()) return;
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        template, templateLabel: selectedLicense.label,
+        entity, purpose, productCategory, channel, region,
+        allowDerivative, projectName, quantityLimit: quantityLimit ? parseInt(quantityLimit, 10) : undefined,
+        price: selectedLicense.price,
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-[70]" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)' }}
-        onClick={onClose} />
+        onClick={submitting ? undefined : onClose} />
 
       <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 32, stiffness: 280 }}
@@ -1153,7 +1162,7 @@ function LicenseApplyDrawer({
           style={{ background: 'rgba(245,240,232,0.95)', borderBottom: '1px solid rgba(26,61,74,0.07)' }}>
           <div className="flex items-center justify-between mb-0.5">
             <h2 className="text-sm text-[#1A3D4A]" style={{ fontWeight: 700 }}>申请授权</h2>
-            <button onClick={onClose} className="text-[#9B9590] hover:text-[#1A3D4A] transition-colors"><X className="w-4 h-4" /></button>
+            <button disabled={submitting} onClick={onClose} className="text-[#9B9590] hover:text-[#1A3D4A] transition-colors disabled:opacity-50"><X className="w-4 h-4" /></button>
           </div>
           <p className="text-[11px] text-[#9B9590]">· {pattern.ownerName} · {pattern.title}</p>
         </div>
@@ -1282,12 +1291,12 @@ function LicenseApplyDrawer({
 
         {/* Footer */}
         <div className="px-5 py-4 flex gap-2.5 flex-shrink-0" style={{ borderTop: '1px solid rgba(26,61,74,0.07)' }}>
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm text-[#6B6558] transition-all"
+          <button disabled={submitting} onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm text-[#6B6558] transition-all disabled:opacity-50"
             style={{ border: '1px solid rgba(26,61,74,0.12)', background: 'white' }}>取消</button>
-          <button onClick={handleSubmit} disabled={!canSubmit}
+          <button onClick={() => void handleSubmit()} disabled={!canSubmit || submitting}
             className="flex-1 py-2.5 rounded-xl text-sm text-white transition-all"
-            style={{ background: canSubmit ? 'linear-gradient(135deg, #1A3D4A, #2A5568)' : 'rgba(26,61,74,0.25)', cursor: canSubmit ? 'pointer' : 'not-allowed' }}>
-            提交申请
+            style={{ background: canSubmit && !submitting ? 'linear-gradient(135deg, #1A3D4A, #2A5568)' : 'rgba(26,61,74,0.25)', cursor: canSubmit && !submitting ? 'pointer' : 'not-allowed' }}>
+            {submitting ? '提交中…' : '提交申请'}
           </button>
         </div>
       </motion.div>
@@ -1328,7 +1337,7 @@ function LicenseReviewModal({
 
         {/* Pattern preview */}
         <div className="p-4 flex gap-3" style={{ borderBottom: '1px solid rgba(26,61,74,0.07)' }}>
-          <img src={order.patternImage} alt={order.patternTitle} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" style={{ border: '1.5px solid rgba(26,61,74,0.1)' }} />
+          <ProtectedImage src={order.patternImage} alt={order.patternTitle} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" style={{ border: '1.5px solid rgba(26,61,74,0.1)' }} />
           <div className="flex-1 min-w-0">
             <p className="text-sm text-[#1A3D4A] truncate" style={{ fontWeight: 700 }}>{order.patternTitle}</p>
             <div className="flex items-center gap-1.5 mt-1">
@@ -1482,7 +1491,7 @@ function QRCodeMock({ size = 144, color = '#000000', seed = 1 }: { size?: number
 
 function PaymentModal({ order, onSuccess, onClose }: {
   order: LicenseOrder;
-  onSuccess: () => void;
+  onSuccess: (payChannel: 'WECHAT' | 'ALIPAY') => Promise<void> | void;
   onClose: () => void;
 }) {
   const [method, setMethod] = useState<'wechat' | 'alipay'>('wechat');
@@ -1505,9 +1514,14 @@ function PaymentModal({ order, onSuccess, onClose }: {
   const handleSimulatePay = async () => {
     setPhase('processing');
     await new Promise(r => setTimeout(r, 1800));
-    setPhase('success');
-    await new Promise(r => setTimeout(r, 1200));
-    onSuccess();
+    try {
+      await onSuccess(method === 'wechat' ? 'WECHAT' : 'ALIPAY');
+      setPhase('success');
+      await new Promise(r => setTimeout(r, 1200));
+      onClose();
+    } catch {
+      setPhase('qr');
+    }
   };
 
   const wechatGreen = '#07C160';
@@ -1545,7 +1559,7 @@ function PaymentModal({ order, onSuccess, onClose }: {
         <div className="px-5 py-3 flex items-center justify-between"
           style={{ background: 'rgba(245,240,232,0.8)', borderBottom: '1px solid rgba(26,61,74,0.07)' }}>
           <div className="flex items-center gap-2 min-w-0">
-            <img src={order.patternImage} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+            <ProtectedImage src={order.patternImage} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
             <div className="min-w-0">
               <p className="text-[11px] text-[#1A3D4A] truncate" style={{ fontWeight: 600 }}>{order.patternTitle}</p>
               <p className="text-[10px] text-[#9B9590]">{order.templateLabel}</p>
@@ -1677,7 +1691,7 @@ function PaymentCard({ order, onPay, onCancel }: { order: LicenseOrder; onPay: (
         </div>
       )}
       <div className="p-3.5 flex gap-3">
-        <img src={order.patternImage} alt={order.patternTitle} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" style={{ border: '1.5px solid rgba(26,61,74,0.1)' }} />
+        <ProtectedImage src={order.patternImage} alt={order.patternTitle} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" style={{ border: '1.5px solid rgba(26,61,74,0.1)' }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -1825,7 +1839,7 @@ function AppOrderRow({ order }: { order: LicenseOrder }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-xl"
       style={{ background: 'white', border: '1px solid rgba(26,61,74,0.08)' }}>
-      <img src={order.patternImage} alt={order.patternTitle} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+      <ProtectedImage src={order.patternImage} alt={order.patternTitle} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-sm text-[#1A3D4A] truncate" style={{ fontWeight: 600 }}>{order.patternTitle}</p>
         <p className="text-[10px] text-[#9B9590] mt-0.5">{order.sellerName} · {order.templateLabel} · 单号 {order.orderNo}</p>
@@ -1854,7 +1868,7 @@ function ArchivedLicenseCard({ order }: { order: LicenseOrder }) {
       </div>
       {/* Content */}
       <div className="p-3 flex items-center gap-3">
-        <img src={order.patternImage} alt={order.patternTitle}
+        <ProtectedImage src={order.patternImage} alt={order.patternTitle}
           className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
           style={{ border: '1px solid rgba(26,61,74,0.08)' }} />
         <div className="flex-1 min-w-0">
@@ -1953,9 +1967,10 @@ function MyApplicationsTab({ orders, onPay, onCancel }: {
 
 // ── PendingMyActionTab ────────────────────────────────────────────────────────
 
-function PendingMyActionTab({ orders, onReview }: {
+function PendingMyActionTab({ orders, onReview, dashboard }: {
   orders: LicenseOrder[];
   onReview: (order: LicenseOrder) => void;
+  dashboard?: MarketDashboard | null;
 }) {
   const sellOrders = orders.filter(o => o.direction === 'sell');
   const pending = sellOrders.filter(o => o.status === 'submitted');
@@ -1963,9 +1978,9 @@ function PendingMyActionTab({ orders, onReview }: {
 
   // Revenue stats
   const completedOrders = sellOrders.filter(o => o.status === 'completed');
-  const totalGross = completedOrders.reduce((s, o) => s + o.price, 0);
-  const totalNet = Math.round(totalGross * 0.9);
-  const totalCommission = totalGross - totalNet;
+  const totalGross = dashboard?.sellerGrossAmount ?? completedOrders.reduce((s, o) => s + o.price, 0);
+  const totalCommission = dashboard?.sellerCommissionAmount ?? Math.round(totalGross * 0.1);
+  const totalNet = dashboard?.sellerNetAmount ?? Math.round(totalGross * 0.9);
 
   const RowItem = ({ order, isPending }: { order: LicenseOrder; isPending: boolean }) => {
     const cfg = ORDER_STATUS_CFG[order.status];
@@ -1973,7 +1988,7 @@ function PendingMyActionTab({ orders, onReview }: {
       <tr className="border-b" style={{ borderColor: 'rgba(26,61,74,0.06)' }}>
         <td className="py-3 px-3">
           <div className="flex items-center gap-2">
-            <img src={order.patternImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+          <ProtectedImage src={order.patternImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
             <span className="text-xs text-[#1A3D4A] truncate max-w-[120px]" style={{ fontWeight: 600 }}>{order.patternTitle}</span>
           </div>
         </td>
@@ -2085,107 +2100,253 @@ function PendingMyActionTab({ orders, onReview }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+function dedupeById<T extends { id: string }>(items: T[]) {
+  const result = new Map<string, T>();
+  items.forEach(item => result.set(item.id, item));
+  return Array.from(result.values());
+}
+
 export function PatternMarketPage() {
   const { clearRedDot } = useApp();
-  const [patterns, setPatterns] = useState<MarketPattern[]>(SEED_PATTERNS);
-  const [orders, setOrders] = useState<LicenseOrder[]>(SEED_ORDERS);
+  const { user } = useAuth();
+  const [patterns, setPatterns] = useState<MarketPattern[]>([]);
+  const [orders, setOrders] = useState<LicenseOrder[]>([]);
+  const [dashboard, setDashboard] = useState<MarketDashboard | null>(null);
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<MarketTab>('all');
   const [detailPattern, setDetailPattern] = useState<MarketPattern | null>(null);
   const [applyTarget, setApplyTarget] = useState<MarketPattern | null>(null);
   const [reviewOrder, setReviewOrder] = useState<LicenseOrder | null>(null);
   const [payingOrder, setPayingOrder] = useState<LicenseOrder | null>(null);
+  const detailRequestSeqRef = useRef(0);
 
-  useEffect(() => { clearRedDot('market' as any); }, []);
+  const currentUserId = user?.id ? String(user.id) : undefined;
+  const pendingPayCount = dashboard?.pendingPayCount ?? orders.filter(o => o.direction === 'buy' && o.status === 'approved_pending_pay').length;
+  const pendingReviewCount = dashboard?.pendingReviewCount ?? orders.filter(o => o.direction === 'sell' && o.status === 'submitted').length;
+  const marketOnSaleCount = dashboard?.marketOnSaleCount ?? patterns.filter(p => p.publishStatus === 'on_sale').length;
+  const myOnSaleCount = dashboard?.myOnSaleCount ?? patterns.filter(p => p.ownerId === MY_USER_ID && p.publishStatus === 'on_sale').length;
 
-  const pendingPayCount = orders.filter(o => o.direction === 'buy' && o.status === 'approved_pending_pay').length;
-  const pendingReviewCount = orders.filter(o => o.direction === 'sell' && o.status === 'submitted').length;
+  const loadAllPatternRecords = useCallback(async (scope: 'ALL' | 'MINE') => {
+    if (!currentUserId) {
+      return [] as MarketPattern[];
+    }
+
+    const records: MarketPattern[] = [];
+    let pageNum = 1;
+    let pages = 1;
+    do {
+      const page = await marketService.pagePatterns<MarketPattern>({ scope, pageNum, pageSize: 100 }, currentUserId);
+      records.push(...page.records);
+      pages = Math.max(page.pages || 1, 1);
+      pageNum += 1;
+    } while (pageNum <= pages);
+
+    return records;
+  }, [currentUserId]);
+
+  const loadAllOrderRecords = useCallback(async (role: 'BUYER' | 'SELLER') => {
+    if (!currentUserId) {
+      return [] as LicenseOrder[];
+    }
+
+    const records: LicenseOrder[] = [];
+    let pageNum = 1;
+    let pages = 1;
+    do {
+      const page = await marketService.pageOrders<LicenseOrder>({ role, pageNum, pageSize: 100 }, currentUserId);
+      records.push(...page.records);
+      pages = Math.max(page.pages || 1, 1);
+      pageNum += 1;
+    } while (pageNum <= pages);
+
+    return records;
+  }, [currentUserId]);
+
+  const refreshMarketData = useCallback(async () => {
+    if (!currentUserId) return;
+
+    setLoading(true);
+    const results = await Promise.allSettled([
+      marketService.getDashboard(),
+      loadAllPatternRecords('ALL'),
+      loadAllPatternRecords('MINE'),
+      loadAllOrderRecords('BUYER'),
+      loadAllOrderRecords('SELLER'),
+    ]);
+
+    try {
+      const [dashboardResult, allPatternsResult, minePatternsResult, buyerOrdersResult, sellerOrdersResult] = results;
+
+      const failures = results.filter(result => result.status === 'rejected');
+      const hasSuccess = results.some(result => result.status === 'fulfilled');
+
+      if (dashboardResult.status === 'fulfilled') {
+        setDashboard(dashboardResult.value);
+      }
+
+      const patternRecords = [
+        ...(allPatternsResult.status === 'fulfilled' ? allPatternsResult.value : []),
+        ...(minePatternsResult.status === 'fulfilled' ? minePatternsResult.value : []),
+      ];
+      if (patternRecords.length > 0 || (allPatternsResult.status === 'fulfilled' && minePatternsResult.status === 'fulfilled')) {
+        setPatterns(dedupeById(patternRecords));
+      }
+
+      const orderRecords = [
+        ...(buyerOrdersResult.status === 'fulfilled' ? buyerOrdersResult.value : []),
+        ...(sellerOrdersResult.status === 'fulfilled' ? sellerOrdersResult.value : []),
+      ];
+      if (orderRecords.length > 0 || (buyerOrdersResult.status === 'fulfilled' && sellerOrdersResult.status === 'fulfilled')) {
+        setOrders(dedupeById(orderRecords));
+      }
+
+      if (!hasSuccess) {
+        const firstFailure = failures[0];
+        const message = firstFailure?.status === 'rejected' && firstFailure.reason instanceof Error
+          ? firstFailure.reason.message
+          : '纹样市集加载失败';
+        toast.error('纹样市集加载失败', { description: message });
+        return;
+      }
+
+      if (failures.length > 0) {
+        const firstFailure = failures[0];
+        const message = firstFailure?.status === 'rejected' && firstFailure.reason instanceof Error
+          ? firstFailure.reason.message
+          : '部分数据刷新失败';
+        toast.warning('部分数据刷新失败', { description: message });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUserId, loadAllOrderRecords, loadAllPatternRecords]);
+
+  useEffect(() => {
+    clearRedDot('market' as any);
+  }, [clearRedDot]);
+
+  useEffect(() => {
+    void refreshMarketData();
+  }, [refreshMarketData]);
 
   const TABS: { key: MarketTab; label: string; badge?: number }[] = [
     { key: 'all',     label: '可授权纹样' },
     { key: 'pending', label: '待我处理', badge: pendingReviewCount > 0 ? pendingReviewCount : undefined },
     { key: 'applied', label: '我申请的', badge: pendingPayCount > 0 ? pendingPayCount : undefined },
-    { key: 'mine',    label: '我发布的', badge: patterns.filter(p => p.ownerId === MY_USER_ID && p.publishStatus === 'on_sale').length },
+    { key: 'mine',    label: '我发布的', badge: myOnSaleCount },
   ];
 
-  const handleApplySubmit = (data: Partial<LicenseOrder>) => {
+  const closeDetailPanel = useCallback(() => {
+    detailRequestSeqRef.current += 1;
+    setDetailPattern(null);
+  }, []);
+
+  const handleViewPattern = useCallback(async (pattern: MarketPattern) => {
+    const requestSeq = detailRequestSeqRef.current + 1;
+    detailRequestSeqRef.current = requestSeq;
+    setDetailPattern(pattern);
+    if (!currentUserId) return;
+
+    try {
+      const detail = await marketService.getPatternDetail<MarketPattern>(pattern.id, currentUserId);
+      if (detailRequestSeqRef.current !== requestSeq) {
+        return;
+      }
+      setDetailPattern(detail);
+    } catch (error) {
+      if (detailRequestSeqRef.current !== requestSeq) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : '纹样详情加载失败';
+      toast.error('纹样详情加载失败', { description: message });
+    }
+  }, [currentUserId]);
+
+  const handleApplySubmit = async (data: Partial<LicenseOrder>) => {
     if (!applyTarget) return;
-    const newOrder: LicenseOrder = {
-      id: `ord_${Date.now()}`,
-      orderNo: `LIC-2026-${Date.now().toString().slice(-6)}`,
-      patternId: applyTarget.id,
-      patternTitle: applyTarget.title,
-      patternImage: applyTarget.imageUrl,
-      sellerId: applyTarget.ownerId,
-      sellerName: applyTarget.ownerName,
-      buyerName: MY_USER_NAME,
-      template: data.template!,
-      templateLabel: data.templateLabel!,
-      purpose: data.purpose!,
-      entity: data.entity!,
-      productCategory: data.productCategory!,
-      channel: data.channel!,
-      region: data.region!,
-      allowDerivative: data.allowDerivative ?? false,
-      projectName: data.projectName,
-      quantityLimit: data.quantityLimit,
-      price: data.price!,
-      status: 'submitted',
-      direction: 'buy',
-      appliedAt: new Date().toLocaleString('zh-CN').replace(/\//g, '-'),
-    };
-    setOrders(prev => [newOrder, ...prev]);
-    setApplyTarget(null);
-    setActiveTab('applied');
-    toast.success('授权申请已提交', { description: `已向「${applyTarget.ownerName}」发起申请，等待对方审批` });
+
+    try {
+      await marketService.createOrder({
+        patternId: applyTarget.id,
+        template: data.template!,
+        entity: data.entity!,
+        purpose: data.purpose!,
+        productCategory: data.productCategory!,
+        channel: data.channel!,
+        region: data.region!,
+        allowDerivative: data.allowDerivative ?? false,
+        projectName: data.projectName,
+        quantityLimit: data.quantityLimit,
+      });
+      await refreshMarketData();
+      setApplyTarget(null);
+      setActiveTab('applied');
+      toast.success('授权申请已提交', { description: `已向「${applyTarget.ownerName}」发起申请，等待对方审批` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '授权申请提交失败';
+      toast.error('授权申请提交失败', { description: message });
+    }
   };
 
-  const handleApprove = (orderId: string) => {
-    const deadline = Date.now() + 2 * 60 * 60 * 1000;
-    setOrders(prev => prev.map(o => o.id === orderId
-      ? { ...o, status: 'approved_pending_pay' as OrderStatus, approvedAt: new Date().toLocaleString('zh-CN').replace(/\//g, '-'), payDeadline: deadline }
-      : o));
-    setReviewOrder(null);
-    toast.success('已同意授权', { description: '买方将在2小时内完成付款，超时自动取消' });
+  const handleApprove = async (orderId: string) => {
+    try {
+      await marketService.approveOrder(orderId);
+      await refreshMarketData();
+      setReviewOrder(null);
+      toast.success('已同意授权', { description: '买方将在2小时内完成付款，超时自动取消' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '授权审批失败';
+      toast.error('授权审批失败', { description: message });
+    }
   };
 
-  const handleReject = (orderId: string, reason: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId
-      ? { ...o, status: 'rejected' as OrderStatus, rejectReason: reason }
-      : o));
-    setReviewOrder(null);
-    toast.info('已拒绝授权申请', { description: `拒绝原因：${reason}` });
+  const handleReject = async (orderId: string, reason: string) => {
+    try {
+      await marketService.rejectOrder(orderId, reason);
+      await refreshMarketData();
+      setReviewOrder(null);
+      toast.info('已拒绝授权申请', { description: `拒绝原因：${reason}` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '拒绝授权申请失败';
+      toast.error('拒绝授权申请失败', { description: message });
+    }
   };
 
   const handlePay = (orderId: string) => {
-    // 打开支付弹窗
     const order = orders.find(o => o.id === orderId);
     if (order) setPayingOrder(order);
   };
 
-  const handlePaySuccess = () => {
+  const handlePaySuccess = async (payChannel: 'WECHAT' | 'ALIPAY') => {
     if (!payingOrder) return;
-    const orderId = payingOrder.id;
-    const title   = payingOrder.patternTitle;
-    setOrders(prev => prev.map(o =>
-      o.id === orderId
-        ? { ...o, status: 'completed' as OrderStatus, paidAt: new Date().toLocaleString('zh-CN').replace(/\//g, '-') }
-        : o
-    ));
-    setPayingOrder(null);
-    toast.success('付款成功！纹样已自动入库', { description: `「${title}」已进入您的「我的纹库」，来源：授权获得` });
+
+    try {
+      await marketService.payOrder(payingOrder.id, payChannel);
+      await refreshMarketData();
+      const title = payingOrder.patternTitle;
+      toast.success('付款成功！纹样已自动入库', { description: `「${title}」已进入您的「我的纹库」，来源：授权获得` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '支付失败';
+      toast.error('支付失败', { description: message });
+      throw error;
+    }
   };
 
-  const handleCancelOrder = (orderId: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'expired' as OrderStatus } : o));
-    toast.info('已取消订单');
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      await marketService.cancelOrder(orderId);
+      await refreshMarketData();
+      toast.info('已取消订单');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '取消订单失败';
+      toast.error('取消订单失败', { description: message });
+    }
   };
 
   const handleToggleShelf = (patternId: string) => {
     const pattern = patterns.find(p => p.id === patternId);
     if (!pattern) return;
-    const next: PublishStatus = pattern.publishStatus === 'on_sale' ? 'off_shelf' : 'on_sale';
-    setPatterns(prev => prev.map(p => p.id === patternId ? { ...p, publishStatus: next } : p));
-    toast.success(next === 'on_sale' ? '已重新上架' : '已下架', { description: next === 'off_shelf' ? '纹样已从市集移除，可随时重新上架' : '纹样已重新在市集展示' });
+    toast.info('当前页面未提供上下架按钮，市集状态请从「我的纹样」页操作', { description: `「${pattern.title}」当前状态：${PUBLISH_STATUS_CFG[pattern.publishStatus].label}` });
   };
 
   return (
@@ -2199,7 +2360,11 @@ export function PatternMarketPage() {
             <div className="flex items-center gap-2.5 mb-0.5">
               <h1 className="text-[#1A3D4A]" style={{ fontSize: 18, fontWeight: 700 }}>纹样市集 · 授权交易广场</h1>
               <span className="text-[10px] px-2 py-0.5 rounded-full text-white"
-                style={{ background: '#1A3D4A', fontWeight: 600 }}>{patterns.filter(p => p.publishStatus === 'on_sale').length} 件在售</span>
+                style={{ background: '#1A3D4A', fontWeight: 600 }}>{marketOnSaleCount} 件在售</span>
+              {loading && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full"
+                  style={{ background: 'rgba(196,145,42,0.12)', color: '#A8741A', fontWeight: 600 }}>加载中</span>
+              )}
             </div>
             <p className="text-xs text-[#9B9590] mt-0.5">汇聚非遗智造纹样，一站式浏览·申请授权·交易成交·自动入库 </p>
           </div>
@@ -2246,16 +2411,16 @@ export function PatternMarketPage() {
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
         <AnimatePresence mode="wait">
           {activeTab === 'all' && (
             <motion.div key="all" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-              <AllPatternsTab patterns={patterns} onView={setDetailPattern} onApply={setApplyTarget} />
+              <AllPatternsTab patterns={patterns} onView={handleViewPattern} onApply={setApplyTarget} />
             </motion.div>
           )}
           {activeTab === 'mine' && (
             <motion.div key="mine" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-              <MyPublishedTab patterns={patterns} onView={setDetailPattern} onToggleShelf={handleToggleShelf} />
+              <MyPublishedTab patterns={patterns} onView={handleViewPattern} onToggleShelf={handleToggleShelf} />
             </motion.div>
           )}
           {activeTab === 'applied' && (
@@ -2265,7 +2430,7 @@ export function PatternMarketPage() {
           )}
           {activeTab === 'pending' && (
             <motion.div key="pending" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-              <PendingMyActionTab orders={orders} onReview={setReviewOrder} />
+              <PendingMyActionTab orders={orders} onReview={setReviewOrder} dashboard={dashboard} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -2277,8 +2442,11 @@ export function PatternMarketPage() {
           <PatternDetailPanel
             key="detail"
             pattern={detailPattern}
-            onClose={() => setDetailPattern(null)}
-            onApply={() => { setApplyTarget(detailPattern); setDetailPattern(null); }}
+            onClose={closeDetailPanel}
+            onApply={() => {
+              setApplyTarget(detailPattern);
+              closeDetailPanel();
+            }}
           />
         )}
         {applyTarget && (
