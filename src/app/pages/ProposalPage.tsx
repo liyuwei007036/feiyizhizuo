@@ -787,7 +787,12 @@ export function ProposalPage() {
                 <div className="col-span-2">
                   <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                     <div className="relative">
-                      <ProtectedImage src={schemeImages[currentSchemeIndex]} alt={`Scheme ${currentSchemeIndex + 1}`} className="w-full h-72 object-cover" />
+                      <ProtectedImage
+                        src={schemeImages[currentSchemeIndex]}
+                        alt={`Scheme ${currentSchemeIndex + 1}`}
+                        className="w-full h-72 object-cover cursor-zoom-in"
+                        onClick={() => setPresentationMode(true)}
+                      />
                       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/30" />
                       {schemeImages.length > 1 && (
                         <>
@@ -812,7 +817,13 @@ export function ProposalPage() {
 
                     <div className="flex gap-2 p-3 border-b border-gray-50">
                       {schemeImages.map((img, i) => (
-                        <button key={i} onClick={() => setCurrentSchemeIndex(i)}
+                        <button key={i} onClick={() => {
+                          if (i === currentSchemeIndex) {
+                            setPresentationMode(true);
+                            return;
+                          }
+                          setCurrentSchemeIndex(i);
+                        }}
                           className={`w-16 h-12 rounded-lg overflow-hidden border-2 transition-all ${currentSchemeIndex === i ? 'border-[#8B1C1C]' : 'border-transparent hover:border-amber-300'}`}>
                           <ProtectedImage src={img} alt={`thumb ${i}`} className="w-full h-full object-cover" />
                         </button>

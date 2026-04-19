@@ -568,7 +568,7 @@ function DirectionCard({ dir, isSelected, onSelect, onUnlock, onZoom, confirmedI
       </div>
 
       {/* Image — 显示锁定纹样（问题5/6） */}
-      <div className="relative overflow-hidden group" style={{ height: 160 }}>
+      <div className="relative overflow-hidden group cursor-zoom-in" style={{ height: 160 }} onClick={() => onZoom(displayImage)}>
         <ProtectedImage src={displayImage} alt={dir.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.52) 0%, transparent 55%)' }} />
         <div className="absolute bottom-0 left-0 right-0 px-3 pb-2.5">
@@ -693,7 +693,7 @@ function ConfirmedDirectionCard({ dir, pattern, onZoom }: {
       {/* Body: two-column */}
       <div className="flex">
         {/* Left: effect image */}
-        <div className="relative group flex-shrink-0" style={{ width:240 }}>
+        <div className="relative group flex-shrink-0 cursor-zoom-in" style={{ width:240 }} onClick={() => onZoom(dir.effectImage)}>
           <ProtectedImage src={dir.effectImage} alt={dir.name} className="w-full object-cover" style={{ height:240 }} />
           <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(13,37,53,0.4) 0%, transparent 50%)' }} />
           <button onClick={() => onZoom(dir.effectImage)}
@@ -742,7 +742,8 @@ function ConfirmedDirectionCard({ dir, pattern, onZoom }: {
             <p className="text-[10px] text-[#9B9590] mb-2 uppercase tracking-widest">已锁定纹样</p>
             <div className="flex items-center gap-3">
               <ProtectedImage src={pattern.imageUrl} alt={pattern.name}
-                className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                className="w-14 h-14 rounded-xl object-cover flex-shrink-0 cursor-zoom-in"
+                onClick={() => onZoom(pattern.imageUrl)}
                 style={{ border:`2px solid ${cfg.color}33`, boxShadow:`0 2px 8px ${cfg.color}20` }} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-[#1A3D4A] truncate" style={{ fontWeight:700 }}>{pattern.name}</p>
@@ -1435,6 +1436,7 @@ function LegacyCreateWizard({ clients, onAddClient, onDeleteClient, getClientPro
       <AnimatePresence>
         {patternModalDir && (
           <PatternConfirmModal
+            key={`pattern-modal-${patternModalDir.id}`}
             direction={patternModalDir}
             hasReplacement={!!reviewConfirmedDir && reviewConfirmedDir.id !== patternModalDir.id}
             onConfirm={pattern => {
@@ -1446,7 +1448,7 @@ function LegacyCreateWizard({ clients, onAddClient, onDeleteClient, getClientPro
             onClose={() => setPatternModalDir(null)}
           />
         )}
-        {lightboxUrl && <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+        {lightboxUrl && <ImageLightbox key={`legacy-lightbox-${lightboxUrl}`} src={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       </AnimatePresence>
     </div>
   );
@@ -1541,10 +1543,11 @@ function PendingListPanel({ pending, onResume }: {
   );
 }
 
-function ProposalDirectionPreview({ direction, active, onOpen }: {
+function ProposalDirectionPreview({ direction, active, onOpen, onZoom }: {
   direction: ProposalDirectionDetail;
   active?: boolean;
   onOpen: () => void;
+  onZoom: (url: string) => void;
 }) {
   const cfg = DIR_CFG[direction.directionCode];
   const firstReady = direction.styleImages.find(image => !!image.fileId);
@@ -1567,7 +1570,11 @@ function ProposalDirectionPreview({ direction, active, onOpen }: {
           {direction.directionLetter}
         </span>
       </div>
-      <div className="relative" style={{ height: 144, background: 'rgba(26,61,74,0.04)' }}>
+      <div
+        className={`relative ${cover ? 'cursor-zoom-in' : ''}`}
+        style={{ height: 144, background: 'rgba(26,61,74,0.04)' }}
+        onClick={cover ? () => onZoom(cover) : undefined}
+      >
         {cover ? (
           <ProtectedImage src={cover} alt={direction.directionName} className="w-full h-full object-cover" />
         ) : (
@@ -1616,13 +1623,14 @@ function ProposalDirectionPreview({ direction, active, onOpen }: {
   );
 }
 
-function ProposalStyleSelectModal({ direction, proposalStatus, selectedStyleImageId, onClose, onSelect, onRegenerate }: {
+function ProposalStyleSelectModal({ direction, proposalStatus, selectedStyleImageId, onClose, onSelect, onRegenerate, onZoom }: {
   direction: ProposalDirectionDetail;
   proposalStatus: ProposalStatus;
   selectedStyleImageId: string | null;
   onClose: () => void;
   onSelect: (styleImage: ProposalStyleImage) => void;
   onRegenerate: (styleImage: ProposalStyleImage) => Promise<void>;
+  onZoom: (url: string) => void;
 }) {
   const cfg = DIR_CFG[direction.directionCode];
   const [busyStyleId, setBusyStyleId] = useState<string | null>(null);
@@ -1668,7 +1676,11 @@ function ProposalStyleSelectModal({ direction, proposalStatus, selectedStyleImag
                   border: isSelected ? `2px solid ${cfg.color}` : '1px solid rgba(26,61,74,0.08)',
                   background: isSelected ? cfg.light : 'white',
                 }}>
-                <div className="relative" style={{ height: 220, background: 'rgba(26,61,74,0.04)' }}>
+                <div
+                  className={`relative ${imageUrl ? 'cursor-zoom-in' : ''}`}
+                  style={{ height: 220, background: 'rgba(26,61,74,0.04)' }}
+                  onClick={imageUrl ? () => onZoom(imageUrl) : undefined}
+                >
                   {imageUrl ? (
                     <ProtectedImage src={imageUrl} alt={styleImage.styleName} className="w-full h-full object-cover" />
                   ) : (
@@ -1748,6 +1760,7 @@ function ProposalWizard({ clients, onAddClient, onDeleteClient, getClientProposa
   const [selectedDirectionCode, setSelectedDirectionCode] = useState<string | null>(null);
   const [selectedStyleImageId, setSelectedStyleImageId] = useState<string | null>(null);
   const [styleModalDirection, setStyleModalDirection] = useState<ProposalDirectionDetail | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [ws, setWs] = useState<WizardState>({
     selectedClientId: null,
     newClientName: '',
@@ -2129,7 +2142,7 @@ function ProposalWizard({ clients, onAddClient, onDeleteClient, getClientProposa
             </div>
             <div className="grid grid-cols-3 gap-4">
               {detail.directions.map(direction => (
-                <ProposalDirectionPreview key={direction.directionCode} direction={direction} onOpen={() => setStyleModalDirection(direction)} />
+                <ProposalDirectionPreview key={direction.directionCode} direction={direction} onOpen={() => setStyleModalDirection(direction)} onZoom={url => setLightboxUrl(url)} />
               ))}
             </div>
           </motion.div>
@@ -2163,6 +2176,7 @@ function ProposalWizard({ clients, onAddClient, onDeleteClient, getClientProposa
                   direction={direction}
                   active={selectedDirectionCode === direction.directionCode}
                   onOpen={() => setStyleModalDirection(direction)}
+                  onZoom={url => setLightboxUrl(url)}
                 />
               ))}
             </div>
@@ -2220,14 +2234,17 @@ function ProposalWizard({ clients, onAddClient, onDeleteClient, getClientProposa
       <AnimatePresence>
         {styleModalDirection && detail && (
           <ProposalStyleSelectModal
+            key={`style-modal-${styleModalDirection.directionId}`}
             direction={styleModalDirection}
             proposalStatus={detail.status}
             selectedStyleImageId={selectedStyleImageId}
             onClose={() => setStyleModalDirection(null)}
             onSelect={styleImage => handleSelectStyle(styleModalDirection.directionCode, styleImage)}
             onRegenerate={handleRegenerateStyle}
+            onZoom={url => setLightboxUrl(url)}
           />
         )}
+        {lightboxUrl && <ImageLightbox key={`wizard-lightbox-${lightboxUrl}`} src={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       </AnimatePresence>
     </div>
   );
@@ -2263,7 +2280,7 @@ function ProposalCard({ proposal, onEdit, onDelete }: {
     >
       {/* Image header — compact */}
       {dir && (
-        <div className="relative overflow-hidden group" style={{ height: 120 }}>
+        <div className="relative overflow-hidden group cursor-zoom-in" style={{ height: 120 }} onClick={() => setLightboxUrl(dir.effectImage)}>
           <ProtectedImage src={dir.effectImage} alt={dir.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
           <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.78) 0%, rgba(13,37,53,0.1) 55%, transparent 100%)' }} />
           {/* Direction type badge top-left */}
@@ -2331,7 +2348,8 @@ function ProposalCard({ proposal, onEdit, onDelete }: {
             {proposal.lockedPattern && (
               <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
                 style={{ background: 'rgba(26,61,74,0.03)', border: '1px solid rgba(26,61,74,0.07)' }}>
-                <ProtectedImage src={proposal.lockedPattern.imageUrl} alt="" className="w-7 h-7 rounded-md object-cover flex-shrink-0"
+                <ProtectedImage src={proposal.lockedPattern.imageUrl} alt="" className="w-7 h-7 rounded-md object-cover flex-shrink-0 cursor-zoom-in"
+                  onClick={() => setLightboxUrl(proposal.lockedPattern.imageUrl)}
                   style={{ border: `1.5px solid ${cfg.color}33` }} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] text-[#1A3D4A] truncate" style={{ fontWeight: 600 }}>{proposal.lockedPattern.name}</p>
