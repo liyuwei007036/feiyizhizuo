@@ -2024,13 +2024,12 @@ export function ZhiHuiPage() {
       return;
     }
 
-    if (!pattern.requestId || !pattern.fileId) {
-      toast.error('当前纹样缺少入库所需的请求信息，请重新生成后再试');
+    if (!pattern.fileId) {
+      toast.error('当前纹样缺少入库所需的文件信息，请重新生成后再试');
       return;
     }
 
     await patternService.createFromAi({
-      requestId: pattern.requestId,
       title: pattern.title,
       description: pattern.desc,
       coverFileId: pattern.fileId,

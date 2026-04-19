@@ -93,7 +93,6 @@ export interface CreateUploadPatternInput {
 }
 
 export interface CreateAiPatternInput {
-  requestId: string;
   title: string;
   description?: string;
   coverFileId: string;
