@@ -10,8 +10,8 @@ import {
   ShieldCheck, Award, Check, Lock, Sparkles, Brain, FolderUp,
   CheckCircle2, XCircle, Timer, Building, Plus, Info, Eye,
   ChevronRight, Edit3, Store, Tag, Globe, AlertTriangle,
-  Hourglass, Copy, Package, MapPin, Layers, Coins, RotateCcw,
-  Fingerprint, QrCode, Stamp, BarChart3, Percent, TrendingUp,
+  Hourglass, Copy, Package, MapPin, Layers, Coins,
+  Fingerprint, Stamp, BarChart3, Percent, TrendingUp,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -75,233 +75,6 @@ interface LicenseOrder {
   rejectReason?: string;
   direction: 'buy' | 'sell';
 }
-
-const MY_USER_ID = 'me';
-const MY_USER_NAME = '张设计师';
-
-// ── Mock Data ─────────────────────────────────────────────────────────────────
-
-const APPROVED_DEADLINE = Date.now() + 90 * 60 * 1000;
-
-const SEED_PATTERNS: MarketPattern[] = [
-  {
-    id: 'mp1', ownerId: MY_USER_ID, ownerName: MY_USER_NAME,
-    title: '金云纹团花锦',
-    imageUrl: 'https://images.unsplash.com/photo-1773394175834-2c407177ddcf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-    category: '云锦', style: '古典典藏', material: '桑蚕丝', colorTone: '金色·米白',
-    technique: '妆花挖梭工艺',
-    desc: '以四合如意云纹为主体，金线双勾轮廓，米白底色铺陈，整体呈现典雅礼赠格调。',
-    innovationPoints: '传统云纹骨架与现代构成比例融合，适配品牌VI系统。',
-    adaptProducts: '高端礼盒包装、真丝丝巾、商务笔记本封面',
-    rightsStatus: 'done', copyrightStatus: 'done',
-    publishStatus: 'on_sale', certNo: 'EC-2026-1021',
-    licenses: [
-      { type: 'project', label: '单项目授权', price: 1200 },
-      { type: 'annual', label: '年度授权', price: 3000 },
-      { type: 'limited', label: '限量授权', price: 2160 },
-    ],
-    publishedAt: '2026-03-20', isAllowDerivative: true, isAllowCommercial: true,
-  },
-  {
-    id: 'mp2', ownerId: MY_USER_ID, ownerName: MY_USER_NAME,
-    title: '飞天仙鹤宋锦',
-    imageUrl: 'https://images.unsplash.com/photo-1702633958543-8e91aacb805e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-    category: '宋锦', style: '文化叙事', material: '蚕丝·棉', colorTone: '藏青·金',
-    technique: '宋锦彩纬显花',
-    desc: '飞天造型与仙鹤纹融合，以藏青为底，金色彩纬显花，画面灵动大气。',
-    innovationPoints: '将飞天壁画语言转化为可量产织造纹样，兼顾文化深度与商业适用性。',
-    adaptProducts: '文博礼品、高端家纺、文化演出服装',
-    rightsStatus: 'done', copyrightStatus: 'applied',
-    publishStatus: 'locked', certNo: 'EC-2026-1045',
-    licenses: [
-      { type: 'project', label: '单项目授权', price: 900 },
-      { type: 'annual', label: '年度授权', price: 2250 },
-    ],
-    publishedAt: '2026-03-28', isAllowDerivative: false, isAllowCommercial: true,
-  },
-  {
-    id: 'mp3', ownerId: MY_USER_ID, ownerName: MY_USER_NAME,
-    title: '莲花水纹缂丝',
-    imageUrl: 'https://images.unsplash.com/photo-1736506159866-1d0c2f14e650?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-    category: '缂丝', style: '简雅现代', material: '桑蚕丝', colorTone: '粉白·翠绿',
-    technique: '缂丝戗色',
-    desc: '以水面莲花为意象，粉白翠绿交叠，缂丝戗色工艺呈现出层次丰富的色彩渐变效果。',
-    innovationPoints: '极简构图融合传统缂丝富层感，适配现代软装与空间设计。',
-    adaptProducts: '家居软装、高端茶具礼盒、艺术品限定版',
-    rightsStatus: 'done', copyrightStatus: 'none',
-    publishStatus: 'off_shelf', certNo: 'EC-2026-1067',
-    licenses: [
-      { type: 'annual', label: '年度授权', price: 3200 },
-    ],
-    publishedAt: '2026-02-14', isAllowDerivative: true, isAllowCommercial: true,
-  },
-  {
-    id: 'mp4', ownerId: 'u2', ownerName: '张锦绣坊',
-    title: '青花缠枝莲纹',
-    imageUrl: 'https://images.unsplash.com/photo-1775009985649-425ae59dbfed?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-    category: '陶瓷', style: '古典典藏', material: '高岭土', colorTone: '青瓷蓝·素白',
-    technique: '青花彩绘',
-    desc: '以传统缠枝莲纹为主体，青花发色纯正，线条流畅，藏有元明官窑风范。',
-    innovationPoints: '传统青花纹样矢量化重绘，可直接用于数码打印与印花工艺。',
-    adaptProducts: '陶瓷器皿、文创周边、品牌授权印花',
-    rightsStatus: 'done', copyrightStatus: 'done',
-    publishStatus: 'on_sale', certNo: 'EC-2026-0872',
-    licenses: [
-      { type: 'project', label: '单项目授权', price: 480 },
-      { type: 'annual', label: '年度授权', price: 1200 },
-    ],
-    publishedAt: '2026-02-28', isAllowDerivative: false, isAllowCommercial: true,
-  },
-  {
-    id: 'mp5', ownerId: 'u3', ownerName: '蜀锦研究院',
-    title: '蜀锦凤凰朝阳',
-    imageUrl: 'https://images.unsplash.com/photo-1723779233339-17335cd7c562?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-    category: '蜀锦', style: '文化叙事', material: '蚕丝·棉', colorTone: '朱砂红·宝石蓝',
-    technique: '重纬斜纹提花',
-    desc: '凤凰展翅与朝阳图腾融合，朱砂红与宝石蓝对比强烈，展现蜀锦独有的热烈气韵。',
-    innovationPoints: '古代纹样现代色彩校准，色牢度优化，适配高端服装品牌联名。',
-    adaptProducts: '旗袍、汉服、品牌联名文创',
-    rightsStatus: 'done', copyrightStatus: 'applied',
-    publishStatus: 'on_sale', certNo: 'EC-2026-0934',
-    licenses: [
-      { type: 'project', label: '单项目授权', price: 880 },
-      { type: 'annual', label: '年度授权', price: 2200 },
-      { type: 'limited', label: '限量授权', price: 1056 },
-    ],
-    publishedAt: '2026-03-05', isAllowDerivative: true, isAllowCommercial: true,
-  },
-  {
-    id: 'mp6', ownerId: 'u4', ownerName: '苏绣传承工坊',
-    title: '苏绣牡丹团花',
-    imageUrl: 'https://images.unsplash.com/photo-1643735306118-35224d790082?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-    category: '刺绣', style: '古典典藏', material: '蚕丝·棉', colorTone: '金色·米白',
-    technique: '苏绣乱针绣',
-    desc: '牡丹团纹以苏绣乱针绣手法呈现，花瓣层次分明，色彩饱满，花期永驻。',
-    innovationPoints: '乱针绣效果数字化扫描，保留毛发感肌理，可用于高精度数码印花。',
-    adaptProducts: '高端礼盒、婚庆用品、文化展览周边',
-    rightsStatus: 'done', copyrightStatus: 'none',
-    publishStatus: 'on_sale',
-    licenses: [
-      { type: 'project', label: '单项目授权', price: 700 },
-      { type: 'annual', label: '年度授权', price: 1750 },
-    ],
-    publishedAt: '2026-03-12', isAllowDerivative: false, isAllowCommercial: true,
-  },
-  {
-    id: 'mp7', ownerId: 'u5', ownerName: '京漆工坊',
-    title: '雕漆龙纹宝相花',
-    imageUrl: 'https://images.unsplash.com/photo-1772124713992-1e9a31d59194?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-    category: '漆器', style: '商务厚重', material: '生漆·木', colorTone: '墨绿·烟灰',
-    technique: '雕漆工艺',
-    desc: '龙纹与宝相花交织，以雕漆工艺赋予纹样浮雕立体感，黑底金图大气端庄。',
-    innovationPoints: '浮雕层次数字建模，可同时输出平面印刷与3D雕刻两种生产文件。',
-    adaptProducts: '国礼礼盒、高端摆件、企业定制礼品',
-    rightsStatus: 'done', copyrightStatus: 'done',
-    publishStatus: 'on_sale', certNo: 'EC-2025-0671',
-    licenses: [
-      { type: 'project', label: '单项目授权', price: 2400 },
-      { type: 'annual', label: '年度授权', price: 6000 },
-      { type: 'limited', label: '限量授权', price: 2880 },
-    ],
-    publishedAt: '2026-01-18', isAllowDerivative: false, isAllowCommercial: true,
-  },
-  {
-    id: 'mp8', ownerId: 'u6', ownerName: '非遗剪纸馆',
-    title: '剪纸双喜福字纹',
-    imageUrl: 'https://images.unsplash.com/photo-1762113396386-5b1ea64ba7b4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-    category: '剪纸', style: '文化叙事', material: '宣纸', colorTone: '朱砂红·宝石蓝',
-    technique: '手工刻绘',
-    desc: '双喜与福字相融，剪纸纹样结构精密，线条张力足，喜庆又具设计感。',
-    innovationPoints: '剪纸镂空结构精准提取，可直接转换为激光雕刻路径文件。',
-    adaptProducts: '节庆礼盒、婚礼用品、文创贺卡',
-    rightsStatus: 'none', copyrightStatus: 'none',
-    publishStatus: 'on_sale',
-    licenses: [
-      { type: 'project', label: '单项目授权', price: 680 },
-      { type: 'limited', label: '限量授权', price: 980 },
-    ],
-    publishedAt: '2026-04-01', isAllowDerivative: true, isAllowCommercial: true,
-  },
-];
-
-const SEED_ORDERS: LicenseOrder[] = [
-  {
-    id: 'ord1', orderNo: 'LIC-2026-041001',
-    patternId: 'mp4', patternTitle: '青花缠枝莲纹', patternImage: SEED_PATTERNS[3].imageUrl,
-    sellerId: 'u2', sellerName: '张锦绣坊', buyerName: MY_USER_NAME,
-    template: 'annual', templateLabel: '年度授权',
-    purpose: '用于我们品牌官网及线下文创零售店的印花产品系列开发',
-    entity: '南京鋆寰文创有限公司', productCategory: '文创周边·印花产品',
-    channel: '线上官网·线下零售', region: '中国大陆',
-    allowDerivative: false, price: 980,
-    status: 'approved_pending_pay', direction: 'buy',
-    appliedAt: '2026-04-09 15:22', approvedAt: '2026-04-09 16:00',
-    payDeadline: APPROVED_DEADLINE,
-  },
-  {
-    id: 'ord2', orderNo: 'LIC-2026-041002',
-    patternId: 'mp5', patternTitle: '蜀锦凤凰朝阳', patternImage: SEED_PATTERNS[4].imageUrl,
-    sellerId: 'u3', sellerName: '蜀锦研究院', buyerName: MY_USER_NAME,
-    template: 'limited', templateLabel: '限量授权',
-    purpose: '品牌联名限量丝巾系列，礼盒包装+产品图案',
-    entity: '南京鋆寰文创有限公司', productCategory: '真丝丝巾·礼盒包装',
-    channel: '限定渠道专卖', region: '中国大陆',
-    allowDerivative: true, quantityLimit: 500, price: 1400,
-    status: 'submitted', direction: 'buy',
-    appliedAt: '2026-04-10 09:15',
-  },
-  {
-    id: 'ord3', orderNo: 'LIC-2026-031018',
-    patternId: 'mp8', patternTitle: '剪纸双喜福字纹', patternImage: SEED_PATTERNS[7].imageUrl,
-    sellerId: 'u6', sellerName: '非遗剪纸馆', buyerName: MY_USER_NAME,
-    template: 'project', templateLabel: '单项目授权',
-    purpose: '故宫文创节庆礼盒外包装图案授权使用',
-    entity: '南京鋆寰文创有限公司', productCategory: '节庆礼盒包装',
-    channel: '线下礼品渠道', region: '中国大陆',
-    allowDerivative: false, projectName: '故宫·春节礼盒2026', price: 680,
-    status: 'completed', direction: 'buy',
-    appliedAt: '2026-03-18 11:30', approvedAt: '2026-03-19 10:00',
-    paidAt: '2026-03-19 10:45',
-  },
-  // Incoming to me (sell direction)
-  {
-    id: 'ord4', orderNo: 'LIC-2026-041101',
-    patternId: 'mp1', patternTitle: '金云纹团花锦', patternImage: SEED_PATTERNS[0].imageUrl,
-    sellerId: MY_USER_ID, sellerName: MY_USER_NAME, buyerName: '故宫博物院文创部',
-    template: 'annual', templateLabel: '年度授权',
-    purpose: '用于故宫官方文创产品系列，包括丝巾、书签、高端礼盒等商品开发',
-    entity: '故宫博物院文创部', productCategory: '文博文创·礼品',
-    channel: '故宫线下门店·官方电商', region: '中国大陆',
-    allowDerivative: false, price: 2800,
-    status: 'submitted', direction: 'sell',
-    appliedAt: '2026-04-10 08:40',
-  },
-  {
-    id: 'ord5', orderNo: 'LIC-2026-041102',
-    patternId: 'mp2', patternTitle: '飞天仙鹤宋锦', patternImage: SEED_PATTERNS[1].imageUrl,
-    sellerId: MY_USER_ID, sellerName: MY_USER_NAME, buyerName: '敦煌研究院文创',
-    template: 'project', templateLabel: '单项目授权',
-    purpose: '敦煌主题艺术展配套文创产品，包括展览纪念品及限定文具套装',
-    entity: '敦煌研究院文创中心', productCategory: '展览纪念品·文具套装',
-    channel: '展览现场·线上旗舰店', region: '中国大陆',
-    allowDerivative: false, projectName: '敦煌·时光计划2026', price: 900,
-    status: 'submitted', direction: 'sell',
-    appliedAt: '2026-04-09 17:05',
-  },
-  {
-    id: 'ord6', orderNo: 'LIC-2026-030901',
-    patternId: 'mp1', patternTitle: '金云纹团花锦', patternImage: SEED_PATTERNS[0].imageUrl,
-    sellerId: MY_USER_ID, sellerName: MY_USER_NAME, buyerName: '苏州博物馆文创',
-    template: 'limited', templateLabel: '限量授权',
-    purpose: '苏博开馆60周年纪念限量版文创套装',
-    entity: '苏州博物馆文创部', productCategory: '纪念版文创套装',
-    channel: '苏博专属渠道', region: '华东地区',
-    allowDerivative: false, quantityLimit: 300, price: 1800,
-    status: 'completed', direction: 'sell',
-    appliedAt: '2026-03-08 14:20', approvedAt: '2026-03-09 10:00',
-    paidAt: '2026-03-09 11:30',
-  },
-];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -728,16 +501,17 @@ function CertViewModal({ pattern, certType, onClose }: {
 // ── MarketPatternCard ─────────────────────────────────────────────────────────
 
 function MarketPatternCard({
-  pattern, onView, onApply, onToggleShelf,
+  pattern, currentUserId, onView, onApply, onToggleShelf,
 }: {
   pattern: MarketPattern;
+  currentUserId?: string;
   onView: () => void;
   onApply?: () => void;
   onToggleShelf?: () => void;
 }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [showCert, setShowCert] = useState<'rights' | 'copyright' | null>(null);
-  const isOwner = pattern.ownerId === MY_USER_ID;
+  const isOwner = !!currentUserId && pattern.ownerId === currentUserId;
   const primaryLicense = pattern.licenses[0];
   const psCfg = PUBLISH_STATUS_CFG[pattern.publishStatus];
 
@@ -850,11 +624,11 @@ function MarketPatternCard({
 // ── PatternDetailPanel ────────────────────────────────────────────────────────
 
 function PatternDetailPanel({
-  pattern, onClose, onApply,
-}: { pattern: MarketPattern; onClose: () => void; onApply: () => void; }) {
+  pattern, currentUserId, onClose, onApply,
+}: { pattern: MarketPattern; currentUserId?: string; onClose: () => void; onApply: () => void; }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [showCert, setShowCert] = useState<'rights' | 'copyright' | null>(null);
-  const isOwner = pattern.ownerId === MY_USER_ID;
+  const isOwner = !!currentUserId && pattern.ownerId === currentUserId;
   const psCfg = PUBLISH_STATUS_CFG[pattern.publishStatus];
 
   const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -1730,8 +1504,9 @@ function PaymentCard({ order, onPay, onCancel }: { order: LicenseOrder; onPay: (
 
 // ── AllPatternsTab ────────────────────────────────────────────────────────────
 
-function AllPatternsTab({ patterns, onView, onApply }: {
+function AllPatternsTab({ patterns, currentUserId, onView, onApply }: {
   patterns: MarketPattern[];
+  currentUserId?: string;
   onView: (p: MarketPattern) => void;
   onApply: (p: MarketPattern) => void;
 }) {
@@ -1741,7 +1516,7 @@ function AllPatternsTab({ patterns, onView, onApply }: {
   const [rightsFilter, setRightsFilter] = useState('');
 
   const filtered = patterns.filter(p => {
-    if (p.ownerId === MY_USER_ID) return false;  // 自己发布的在「我发布的」页签查看
+    if (currentUserId && p.ownerId === currentUserId) return false;
     if (p.publishStatus === 'off_shelf') return false;
     if (search && !p.title.includes(search) && !p.ownerName.includes(search) && !p.category.includes(search)) return false;
     if (catFilter && p.category !== catFilter) return false;
@@ -1795,7 +1570,7 @@ function AllPatternsTab({ patterns, onView, onApply }: {
         ) : (
           <div className="grid grid-cols-3 gap-4">
             {filtered.map(p => (
-              <MarketPatternCard key={p.id} pattern={p} onView={() => onView(p)} onApply={() => onApply(p)} />
+              <MarketPatternCard key={p.id} pattern={p} currentUserId={currentUserId} onView={() => onView(p)} onApply={() => onApply(p)} />
             ))}
           </div>
         )}
@@ -1806,12 +1581,13 @@ function AllPatternsTab({ patterns, onView, onApply }: {
 
 // ── MyPublishedTab ────────────────────────────────────────────────────────────
 
-function MyPublishedTab({ patterns, onView, onToggleShelf }: {
+function MyPublishedTab({ patterns, currentUserId, onView, onToggleShelf }: {
   patterns: MarketPattern[];
+  currentUserId?: string;
   onView: (p: MarketPattern) => void;
   onToggleShelf: (id: string) => void;
 }) {
-  const mine = patterns.filter(p => p.ownerId === MY_USER_ID);
+  const mine = currentUserId ? patterns.filter(p => p.ownerId === currentUserId) : [];
   return (
     <div className="h-full overflow-y-auto p-5" style={{ scrollbarWidth: 'thin' }}>
       {mine.length === 0 ? (
@@ -1820,13 +1596,13 @@ function MyPublishedTab({ patterns, onView, onToggleShelf }: {
           <p className="text-[#1A3D4A]" style={{ fontWeight: 500 }}>还没有发布纹样</p>
           <p className="text-sm text-[#9B9590] mt-1">在「我的纹库」中发布纹样后将在此展示</p>
         </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-4">
-          {mine.map(p => (
-            <MarketPatternCard key={p.id} pattern={p} onView={() => onView(p)} onToggleShelf={() => onToggleShelf(p.id)} />
-          ))}
-        </div>
-      )}
+        ) : (
+          <div className="grid grid-cols-3 gap-4">
+            {mine.map(p => (
+              <MarketPatternCard key={p.id} pattern={p} currentUserId={currentUserId} onView={() => onView(p)} onToggleShelf={() => onToggleShelf(p.id)} />
+            ))}
+          </div>
+        )}
     </div>
   );
 }
@@ -2124,7 +1900,7 @@ export function PatternMarketPage() {
   const pendingPayCount = dashboard?.pendingPayCount ?? orders.filter(o => o.direction === 'buy' && o.status === 'approved_pending_pay').length;
   const pendingReviewCount = dashboard?.pendingReviewCount ?? orders.filter(o => o.direction === 'sell' && o.status === 'submitted').length;
   const marketOnSaleCount = dashboard?.marketOnSaleCount ?? patterns.filter(p => p.publishStatus === 'on_sale').length;
-  const myOnSaleCount = dashboard?.myOnSaleCount ?? patterns.filter(p => p.ownerId === MY_USER_ID && p.publishStatus === 'on_sale').length;
+  const myOnSaleCount = dashboard?.myOnSaleCount ?? patterns.filter(p => currentUserId && p.ownerId === currentUserId && p.publishStatus === 'on_sale').length;
 
   const loadAllPatternRecords = useCallback(async (scope: 'ALL' | 'MINE') => {
     if (!currentUserId) {
@@ -2415,12 +2191,12 @@ export function PatternMarketPage() {
         <AnimatePresence mode="wait">
           {activeTab === 'all' && (
             <motion.div key="all" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-              <AllPatternsTab patterns={patterns} onView={handleViewPattern} onApply={setApplyTarget} />
+              <AllPatternsTab patterns={patterns} currentUserId={currentUserId} onView={handleViewPattern} onApply={setApplyTarget} />
             </motion.div>
           )}
           {activeTab === 'mine' && (
             <motion.div key="mine" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-              <MyPublishedTab patterns={patterns} onView={handleViewPattern} onToggleShelf={handleToggleShelf} />
+              <MyPublishedTab patterns={patterns} currentUserId={currentUserId} onView={handleViewPattern} onToggleShelf={handleToggleShelf} />
             </motion.div>
           )}
           {activeTab === 'applied' && (
@@ -2442,6 +2218,7 @@ export function PatternMarketPage() {
           <PatternDetailPanel
             key="detail"
             pattern={detailPattern}
+            currentUserId={currentUserId}
             onClose={closeDetailPanel}
             onApply={() => {
               setApplyTarget(detailPattern);

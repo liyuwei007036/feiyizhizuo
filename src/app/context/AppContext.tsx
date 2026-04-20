@@ -261,50 +261,9 @@ export interface AuthorizedPattern extends MyPattern {
   expiresAt?: string;           // 到期时间
 }
 
-// ── Initial clients data ──────────────────────────────────────────────────────
-const INITIAL_CLIENTS: CopilotClient[] = [
-  {
-    id: 'c1', name: '李文创主任', company: '故宫博物院文创部',
-    stage: '提案中', lastContactAt: '2026-04-07 09:30', intent: '高意向', industry: '博物馆',
-    phone: '13811110001', budget: '80000 – 150000',
-    notes: '对文化辨识度要求高，偏好云锦工艺，希望有可讲述的故事线。',
-  },
-  {
-    id: 'c2', name: '张院长助理', company: '敦煌研究院',
-    stage: '跟进中', lastContactAt: '2026-04-06 16:30', intent: '中意向', industry: '景区',
-    phone: '13922220002', budget: '40000 – 80000',
-    notes: '对飞天纹样有强烈偏好，担心授权问题。',
-  },
-  {
-    id: 'c3', name: '赵馆长', company: '苏州博物馆文创',
-    stage: '待接触', lastContactAt: '2026-04-04 10:00', intent: '低意向', industry: '博物馆',
-    phone: '13633330003', budget: '待确认',
-    notes: '通过展会认识，对非遗文创感兴趣但没有明确项目需求。',
-  },
-];
+const INITIAL_CLIENTS: CopilotClient[] = [];
 
-const INITIAL_PROPOSALS: CopilotProposal[] = [
-  {
-    id: 'seed_1', clientId: 'c1', title: '故宫文创 · 云锦·典雅礼赠',
-    clientName: '李文创主任', clientCompany: '故宫博物院文创部',
-    directionType: '稳妥成交型',
-    summary: '以四合如意云纹为主体，金色线描勾勒，米白底色，兼顾传统美感与商务稳重。',
-    patterns: ['四合如意云纹', '金线云纹底纹'], products: ['高端礼盒', '真丝丝巾', '书签套装'],
-    budget: '45000 – 80000', addedAt: '2026-04-06 14:22', status: 'presenting',
-    patternImageUrl: 'https://images.unsplash.com/photo-1773394175834-2c407177ddcf?w=400',
-    patternTitle: '祥云·典雅版',
-  },
-  {
-    id: 'seed_2', clientId: 'c2', title: '敦煌研究院 · 锦绣·华彩记忆',
-    clientName: '张院长助理', clientCompany: '敦煌研究院',
-    directionType: '文化表达型',
-    summary: '以南京地域文化符号为核心，结合云锦非遗工艺故事，突出可讲述性与文化深度。',
-    patterns: ['飞天纹样变体', '敦煌团花纹'], products: ['文化礼盒', '艺术丝巾', '非遗说明册'],
-    budget: '60000 – 120000', addedAt: '2026-04-05 10:15', status: 'draft',
-    patternImageUrl: 'https://images.unsplash.com/photo-1674326607048-43e0bc88309e?w=400',
-    patternTitle: '流云·现代感',
-  },
-];
+const INITIAL_PROPOSALS: CopilotProposal[] = [];
 
 // 智绘页的收藏态需要和用户真实操作保持一致，这里不再注入演示纹样。
 const INITIAL_MY_PATTERNS: MyPattern[] = [];

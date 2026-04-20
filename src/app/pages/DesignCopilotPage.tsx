@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
@@ -24,6 +24,7 @@ import {
   MapPin, Wallet,
 } from 'lucide-react';
 import { ProtectedImage } from '../components/ProtectedImage';
+import { uploadFile } from '../services/uploadService';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -89,11 +90,6 @@ const PATTERN_POOL: Array<{ url: string; name: string }> = [
   { url:'https://images.unsplash.com/photo-1763400234383-8b9ecbb9c043?w=400', name:'团龙祥云纹'   },
   { url:'https://images.unsplash.com/photo-1768895124631-213163435e30?w=400', name:'折枝牡丹纹'   },
 ];
-const MOCK_UPLOADED: UploadedPattern[] = [
-  { id:'mu1', url:'https://images.unsplash.com/photo-1769710230436-db6353a08af4?w=400', name:'传统锦纹-甲.png' },
-  { id:'mu2', url:'https://images.unsplash.com/photo-1763400234383-8b9ecbb9c043?w=400', name:'传统锦纹-乙.png' },
-  { id:'mu3', url:'https://images.unsplash.com/photo-1707569620487-1fcff5e22f9f?w=400', name:'传统锦纹-丙.png' },
-];
 
 const DIR_CFG: Record<DirectionType, { color: string; light: string; border: string }> = {
   safe:     { color:'#C4912A', light:'rgba(196,145,42,0.07)',  border:'rgba(196,145,42,0.3)'   },
@@ -110,6 +106,12 @@ const now8 = () =>
   new Date().toLocaleString('zh',{ year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }).replace(/\//g,'-');
 
 function shufflePool() { return [...PATTERN_POOL].sort(() => Math.random() - 0.5); }
+
+const MAX_PATTERN_UPLOAD_SIZE = 20 * 1024 * 1024;
+
+function isSupportedPatternFile(file: File) {
+  return /^image\//.test(file.type) || /\.(png|jpe?g|svg|webp)$/i.test(file.name);
+}
 
 // ── Budget helpers ─────────────────────────────────────────────────────────────
 /** 解析预算字符串 → { lo, hi }（单位：元），支持"万"单位与纯数字 */
@@ -232,47 +234,6 @@ function mapBackendCardToProposal(card: ProposalCardResponse): Proposal {
   };
 }
 
-// ── Seed Data ─────────────────────────────────────────────────────────────────
-
-const SEED_PROPOSALS: Proposal[] = [
-  {
-    id:'seed_1', clientId:'c1', clientName:'李文创主任', clientCompany:'故宫博物院文创部',
-    title:'博物馆文创提案 · 礼赠系列',
-    purpose:'博物馆文创', concern:'文化辨识度', style:'古典典藏',
-    elements:['云纹','如意纹','宝相纹'], targetProducts:['高端礼盒','真丝丝巾','书签套装'],
-    addedAt:'2026-04-06 14:22', notes:'客户强调文化叙事性，送礼场合偏正式',
-    selectedDirectionId:'seed_1_A',
-    lockedPattern:{ id:'lp1', name:'四合如意云纹', imageUrl:'https://images.unsplash.com/photo-1751202127096-9517c03939ee?w=400', source:'ai', sourceLabel:'智绘AI生成' },
-    events:[
-      { id:'e1', type:'created',            timestamp:'2026-04-06 14:22', description:'提案已创建' },
-      { id:'e2', type:'direction_selected', timestamp:'2026-04-06 15:30', description:'已选定方向A「云锦·典雅礼赠」，纹���「四合如意云纹」已锁定（智绘AI生成）' },
-    ],
-    directions:[
-      { id:'seed_1_A', type:'safe',     typeLabel:'稳妥成交型', letter:'A', name:'云锦·典雅礼赠',  positioning:'经典四合如意云纹，金色线描勾勒，让客户\"送出去不丢人\"',          effectImage:'https://images.unsplash.com/photo-1695916106317-87cfb79fb25f?w=600', suitableFor:['政务礼赠','贵宾接待','节庆礼盒'],  budget:'45,000 – 80,000',  rightsStatus:'available', rightsLabel:'纹样已收录可用',    craftTechnique:'宋锦彩纬提花', complexity:'★★★☆☆ 中等', material:'桑蚕丝 · 金线', deliveryDays:'25–35 工作日', estimatedPrice:'45,000 – 85,000' },
-      { id:'seed_1_B', type:'cultural', typeLabel:'文化表达型', letter:'B', name:'锦绣·文化叙事',  positioning:'以故宫文化符号为核心，突出\"可讲述性\"，彰显品味与文化自信',         effectImage:'https://images.unsplash.com/photo-1763696118762-03f8fcfb8a8c?w=600', suitableFor:['文博文创','品牌合作','文化展览'],  budget:'60,000 – 120,000', rightsStatus:'pending',   rightsLabel:'部分纹样待确权',    craftTechnique:'云锦妆花挖梭', complexity:'★★★★☆ 复杂', material:'桑蚕丝 · 金银线', deliveryDays:'40–55 工作日', estimatedPrice:'65,000 – 120,000' },
-      { id:'seed_1_C', type:'surprise', typeLabel:'视觉惊喜型', letter:'C', name:'织语·新古典',    positioning:'传统云纹与当代设计语言融合，差异化出圈，适合有创新意愿的采购方',     effectImage:'https://images.unsplash.com/photo-1761660450845-6c3aa8aaf43f?w=600', suitableFor:['品牌联名','艺术展览','年轻受众'],  budget:'30,000 – 55,000',  rightsStatus:'custom',    rightsLabel:'需定制授权',        craftTechnique:'缂丝 + 现代印染', complexity:'★★★★★ 极复杂', material:'真丝 · 植物染料', deliveryDays:'50–70 工作日', estimatedPrice:'30,000 – 60,000' },
-    ],
-  },
-  {
-    id:'seed_2', clientId:'c2', clientName:'张院长助理', clientCompany:'敦煌研究院',
-    title:'博物馆文创提案 · 华彩文化系列',
-    purpose:'博物馆文创', concern:'稳重安全', style:'古典典藏',
-    elements:['飞鸟走兽','云纹'], targetProducts:['高端礼盒','真丝丝巾','文化说明册'],
-    addedAt:'2026-04-05 10:15', notes:'飞天纹样偏好强烈，但需确认授权路径',
-    selectedDirectionId:'seed_2_B',
-    lockedPattern:{ id:'lp2', name:'如意卷草纹', imageUrl:'https://images.unsplash.com/photo-1769710230436-db6353a08af4?w=400', source:'combined', sourceLabel:'AI+自传融合' },
-    events:[
-      { id:'e1', type:'created',            timestamp:'2026-04-05 10:15', description:'提案已创建' },
-      { id:'e2', type:'direction_selected', timestamp:'2026-04-05 11:42', description:'已选定方向B「飞天·文博记忆」，纹样「如意卷草纹」已锁定（AI+自传融合）' },
-    ],
-    directions:[
-      { id:'seed_2_A', type:'safe',     typeLabel:'稳妥成交型', letter:'A', name:'华彩·礼赠典藏',  positioning:'以经典敦煌色彩体系为主，稳重大气，适合正式礼赠场合',               effectImage:'https://images.unsplash.com/photo-1769710230436-db6353a08af4?w=600', suitableFor:['高端礼赠','外事接待','学术赠礼'],  budget:'40,000 – 80,000',  rightsStatus:'available', rightsLabel:'纹样已收录可用',    craftTechnique:'缂丝平纹组织', complexity:'★★★☆☆ 中等', material:'桑蚕丝 · 棉线', deliveryDays:'30–40 工作日', estimatedPrice:'40,000 – 80,000' },
-      { id:'seed_2_B', type:'cultural', typeLabel:'文化表达型', letter:'B', name:'飞天·文博记忆',  positioning:'飞天纹样主体呈现，强调\"文化故事可讲\"，适合博物馆品牌建设',            effectImage:'https://images.unsplash.com/photo-1763400234383-8b9ecbb9c043?w=600', suitableFor:['文博文创','文化IP','研学纪念'],     budget:'60,000 – 100,000', rightsStatus:'pending',   rightsLabel:'飞天纹样需专项授权', craftTechnique:'蜀锦重纬斜纹', complexity:'★★★★☆ 复杂', material:'真丝 · 矿物颜料', deliveryDays:'45–60 工作日', estimatedPrice:'60,000 – 100,000' },
-      { id:'seed_2_C', type:'surprise', typeLabel:'视觉惊喜型', letter:'C', name:'丝路·当代重构',  positioning:'以丝路元素为灵感，现代设计语言重构，适合创意文创产品线',               effectImage:'https://images.unsplash.com/photo-1768895124631-213163435e30?w=600', suitableFor:['创意文创','年轻市场','时尚联名'],  budget:'25,000 – 45,000',  rightsStatus:'custom',    rightsLabel:'需定制开发',        craftTechnique:'苏绣乱针绣法', complexity:'★★★★★ 极复杂', material:'蚕丝 · 植物染料', deliveryDays:'55–75 工作日', estimatedPrice:'28,000 – 50,000' },
-    ],
-  },
-];
-
 // ── Image Lightbox ─────────────────────────────────────────────────────────────
 
 function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
@@ -305,8 +266,11 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
   const [slots, setSlots] = useState<ImageSlot[]>([]);
   const [selSlot, setSelSlot] = useState<number | null>(null);
   const [selUploadId, setSelUploadId] = useState<string | null>(null);
+  const [uploadedPatterns, setUploadedPatterns] = useState<UploadedPattern[]>([]);
   const [combineFile, setCombineFile] = useState<UploadedPattern | null>(null);
-  const [combineUploading, setCombineUploading] = useState(false);
+  const [uploadingMode, setUploadingMode] = useState<'upload' | 'combined' | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const combineInputRef = useRef<HTMLInputElement>(null);
 
   const SRCS: Array<{ key: PatternSource; label: string; icon: ReactNode }> = [
     { key:'ai',       label:'智绘AI生成',   icon:<Cpu      className="w-3.5 h-3.5" /> },
@@ -340,23 +304,56 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
     setSlots(p => p.map(s => s.idx === idx ? { ...s, url:pick.url, name:pick.name, loading:false } : s));
   };
 
-  const handleMockUpload = async () => {
-    setCombineUploading(true);
-    await new Promise(r => setTimeout(r, 1200));
-    setCombineFile({ id:'uf1', url:MOCK_UPLOADED[0].url, name:'自有图案.png' });
-    setCombineUploading(false);
-  };
+  const handlePatternUpload = useCallback(async (file: File, mode: 'upload' | 'combined') => {
+    if (!isSupportedPatternFile(file)) {
+      toast.error('仅支持 PNG、JPG、SVG、WEBP 图片文件');
+      return;
+    }
+    if (file.size > MAX_PATTERN_UPLOAD_SIZE) {
+      toast.error('图片不能超过 20MB');
+      return;
+    }
+
+    setUploadingMode(mode);
+    try {
+      const fileId = await uploadFile(file);
+      const nextPattern: UploadedPattern = {
+        id: fileId,
+        url: proposalFileUrl(fileId),
+        name: file.name,
+      };
+      if (mode === 'combined') {
+        setCombineFile(nextPattern);
+      } else {
+        setUploadedPatterns(prev => [nextPattern, ...prev.filter(item => item.id !== nextPattern.id)]);
+        setSelUploadId(nextPattern.id);
+      }
+      toast.success(`已上传「${file.name}」`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '上传失败';
+      toast.error('图案上传失败', { description: message });
+    } finally {
+      setUploadingMode(current => current === mode ? null : current);
+    }
+  }, []);
+
+  const selectedUpload = uploadedPatterns.find(item => item.id === selUploadId) ?? null;
 
   const canConfirm =
     (source === 'ai' && selSlot !== null && slots[selSlot] && !slots[selSlot].loading) ||
-    (source === 'upload' && selUploadId !== null) ||
+    (source === 'upload' && selectedUpload !== null) ||
     (source === 'combined' && selSlot !== null && combineFile && slots[selSlot] && !slots[selSlot].loading);
 
   const handleConfirm = () => {
     if (!canConfirm) return;
     if (source === 'upload') {
-      const up = MOCK_UPLOADED.find(u => u.id === selUploadId)!;
-      onConfirm({ id:`lp_${Date.now()}`, name:up.name.replace('.png',''), imageUrl:up.url, source:'upload', sourceLabel:'自主上传' });
+      onConfirm({
+        id:`lp_${Date.now()}`,
+        name:selectedUpload?.name.replace(/\.[^.]+$/, '') || '自有上传图案',
+        imageUrl:selectedUpload?.url || '',
+        source:'upload',
+        sourceLabel:'自主上传',
+      });
     } else {
       const slot = slots[selSlot!];
       onConfirm({ id:`lp_${Date.now()}`, name:slot.name, imageUrl:slot.url, source, sourceLabel: SRCS.find(s=>s.key===source)!.label });
@@ -467,38 +464,82 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
           {source === 'combined' && !combineFile && (
             <div>
               <p className="text-xs text-[#6B4F8A] mb-3">先上传您的自有图案，再与智绘AI融合生成</p>
-              <button onClick={handleMockUpload} disabled={combineUploading}
+              <button onClick={() => combineInputRef.current?.click()} disabled={uploadingMode === 'combined'}
                 className="w-full border-2 border-dashed rounded-2xl p-6 flex flex-col items-center gap-2 transition-all"
-                style={{ borderColor:'rgba(107,79,138,0.3)', background:'rgba(107,79,138,0.03)', cursor:combineUploading?'not-allowed':'pointer' }}>
-                {combineUploading ? (
+                style={{ borderColor:'rgba(107,79,138,0.3)', background:'rgba(107,79,138,0.03)', cursor:uploadingMode === 'combined'?'not-allowed':'pointer' }}>
+                {uploadingMode === 'combined' ? (
                   <><Loader2 className="w-7 h-7 text-[#6B4F8A] animate-spin" /><p className="text-xs text-[#6B4F8A]">上传中...</p></>
                 ) : (
                   <><Upload className="w-7 h-7 text-[#9B9590]" />
-                  <p className="text-sm text-[#6B6558]">拖拽或点击上传自有图案</p>
+                  <p className="text-sm text-[#6B6558]">点击上传自有图案</p>
                   <p className="text-[10px] text-[#9B9590]">支持 PNG / JPG / SVG · 最大 20MB</p></>
                 )}
               </button>
+              <input
+                ref={combineInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handlePatternUpload(file, 'combined');
+                  }
+                  e.target.value = '';
+                }}
+              />
             </div>
           )}
 
           {/* ── Upload tab ─── */}
           {source === 'upload' && (
             <div>
-              <div className="w-full border-2 border-dashed rounded-2xl p-4 flex flex-col items-center gap-1.5 mb-4"
+              <button
+                onClick={() => uploadInputRef.current?.click()}
+                disabled={uploadingMode === 'upload'}
+                className="w-full border-2 border-dashed rounded-2xl p-4 flex flex-col items-center gap-1.5 mb-4 transition-all"
                 style={{ borderColor:'rgba(26,61,74,0.15)', background:'rgba(26,61,74,0.02)' }}>
-                <Upload className="w-6 h-6 text-[#9B9590]" />
-                <p className="text-xs text-[#6B6558]">拖拽或点击上传纹样图案</p>
-                <p className="text-[10px] text-[#9B9590]">支持 PNG / JPG / SVG</p>
-              </div>
+                {uploadingMode === 'upload' ? (
+                  <>
+                    <Loader2 className="w-6 h-6 text-[#1A3D4A] animate-spin" />
+                    <p className="text-xs text-[#6B6558]">上传中...</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-6 h-6 text-[#9B9590]" />
+                    <p className="text-xs text-[#6B6558]">点击上传纹样图案</p>
+                    <p className="text-[10px] text-[#9B9590]">支持 PNG / JPG / SVG / WEBP</p>
+                  </>
+                )}
+              </button>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handlePatternUpload(file, 'upload');
+                  }
+                  e.target.value = '';
+                }}
+              />
               <p className="text-[10px] text-[#9B9590] uppercase tracking-widest mb-2">最近上传</p>
-              <div className="grid grid-cols-3 gap-2.5">
-                {MOCK_UPLOADED.map(up => (
+              {uploadedPatterns.length === 0 ? (
+                <div className="rounded-2xl px-4 py-6 text-center" style={{ background:'rgba(26,61,74,0.03)', border:'1px solid rgba(26,61,74,0.08)' }}>
+                  <p className="text-xs text-[#1A3D4A]">暂无已上传图案</p>
+                  <p className="text-[10px] text-[#9B9590] mt-1">上传后即可直接锁定为提案纹样</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2.5">
+                {uploadedPatterns.map(up => (
                   <button key={up.id} onClick={() => setSelUploadId(up.id)}
                     className="relative rounded-xl overflow-hidden aspect-square group"
                     style={{ border: selUploadId===up.id ? `2.5px solid ${cfg.color}` : '2.5px solid transparent' }}>
                     <ProtectedImage src={up.url} alt={up.name} className="w-full h-full object-cover" />
                     <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 50%)' }} />
-                    <p className="absolute bottom-1 left-1 right-1 text-[10px] text-white truncate text-center" style={{ fontWeight:500 }}>{up.name.replace('.png','')}</p>
+                    <p className="absolute bottom-1 left-1 right-1 text-[10px] text-white truncate text-center" style={{ fontWeight:500 }}>{up.name.replace(/\.[^.]+$/, '')}</p>
                     {selUploadId===up.id && (
                       <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center" style={{ background:cfg.color }}>
                         <Check className="w-3 h-3 text-white" />
@@ -506,7 +547,8 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
                     )}
                   </button>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2209,7 +2251,7 @@ function ProposalWizard({ clients, onAddClient, onDeleteClient, getClientProposa
         )}
         {phase === 'generating' && (
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#9B9590]">关闭当前页不会中断后端生成，可在工作台顶部继续恢复</span>
+            <span className="text-xs text-[#9B9590]">关闭当前页不会中断生成，可在工作台顶部继续恢复</span>
             <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-[#1A3D4A]" style={{ border: '1px solid rgba(26,61,74,0.12)' }}>
               暂时关闭
             </button>
