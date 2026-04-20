@@ -226,12 +226,8 @@ function normalizeFileUrl(url?: string | null, fileId?: string | null) {
   return `/api/client/file/content/${encodeURIComponent(fileId)}`;
 }
 
-function normalizeOwnerId(ownerId?: number | string | null, currentUserId?: string | null) {
-  const normalized = ownerId == null ? '' : String(ownerId);
-  if (normalized && currentUserId && normalized === currentUserId) {
-    return 'me';
-  }
-  return normalized;
+function normalizeOwnerId(ownerId?: number | string | null, _currentUserId?: string | null) {
+  return ownerId == null ? '' : String(ownerId);
 }
 
 function normalizeTemplate(value?: string | null): FrontLicenseOption['type'] {
