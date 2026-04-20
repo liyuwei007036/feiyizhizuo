@@ -20,7 +20,7 @@ import {
   Plus, User, Check, X, Zap, ChevronRight, ChevronLeft, Search,
   Sparkles, Trash2, AlertTriangle, Send,
   FileText, Package, Clock, ZoomIn, Loader2,
-  Upload, Cpu, GitMerge, Phone, RefreshCw, Lock, Pencil,
+  Upload, Cpu, Phone, RefreshCw, Lock, Pencil,
   MapPin, Wallet,
 } from 'lucide-react';
 import { ProtectedImage } from '../components/ProtectedImage';
@@ -29,7 +29,7 @@ import { uploadFile } from '../services/uploadService';
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type DirectionType  = 'safe' | 'cultural' | 'surprise';
-type PatternSource  = 'ai' | 'upload' | 'combined';
+type PatternSource  = 'ai' | 'upload';
 type EventType      = 'created' | 'direction_selected' | 'pdf_exported' | 'feedback_recorded' | 'signed';
 
 interface Direction {
@@ -82,30 +82,19 @@ const STYLES    = ['古典典藏','简雅现代','商务厚重','自由探索'];
 const ELEMENTS  = ['云纹','龙凤纹','花卉纹','如意纹','山水纹','几何纹','文字印章','飞鸟走兽','宝相纹','吉祥八宝','莲荷纹','折枝草虫'];
 const PRODUCTS  = ['高端礼盒','真丝丝巾','书签套装','艺术挂画','文具套装','空间软装','服饰应用','文化说明册'];
 
-const PATTERN_POOL: Array<{ url: string; name: string }> = [
-  { url:'https://images.unsplash.com/photo-1751202127096-9517c03939ee?w=400', name:'四合如意云纹' },
-  { url:'https://images.unsplash.com/photo-1707569620487-1fcff5e22f9f?w=400', name:'宝相团花纹'   },
-  { url:'https://images.unsplash.com/photo-1768943367297-129f5fb9d4ea?w=400', name:'缠枝花卉纹'   },
-  { url:'https://images.unsplash.com/photo-1769710230436-db6353a08af4?w=400', name:'如意卷草纹'   },
-  { url:'https://images.unsplash.com/photo-1763400234383-8b9ecbb9c043?w=400', name:'团龙祥云纹'   },
-  { url:'https://images.unsplash.com/photo-1768895124631-213163435e30?w=400', name:'折枝牡丹纹'   },
-];
-
 const DIR_CFG: Record<DirectionType, { color: string; light: string; border: string }> = {
   safe:     { color:'#C4912A', light:'rgba(196,145,42,0.07)',  border:'rgba(196,145,42,0.3)'   },
   cultural: { color:'#1A3D4A', light:'rgba(26,61,74,0.06)',   border:'rgba(26,61,74,0.2)'     },
   surprise: { color:'#6B4F8A', light:'rgba(107,79,138,0.07)', border:'rgba(107,79,138,0.25)'  },
 };
-const DIR_TEMPLATES: Record<DirectionType, { typeLabel: string; letter: 'A'|'B'|'C'; effectImage: string }> = {
-  safe:     { typeLabel:'稳妥成交型', letter:'A', effectImage:'https://images.unsplash.com/photo-1695916106317-87cfb79fb25f?w=600' },
-  cultural: { typeLabel:'文化表达型', letter:'B', effectImage:'https://images.unsplash.com/photo-1763696118762-03f8fcfb8a8c?w=600' },
-  surprise: { typeLabel:'视觉惊喜型', letter:'C', effectImage:'https://images.unsplash.com/photo-1761660450845-6c3aa8aaf43f?w=600' },
+const DIRECTION_META: Record<DirectionType, { typeLabel: string; letter: 'A'|'B'|'C' }> = {
+  safe:     { typeLabel:'稳妥成交型', letter:'A' },
+  cultural: { typeLabel:'文化表达型', letter:'B' },
+  surprise: { typeLabel:'视觉惊喜型', letter:'C' },
 };
 
 const now8 = () =>
   new Date().toLocaleString('zh',{ year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }).replace(/\//g,'-');
-
-function shufflePool() { return [...PATTERN_POOL].sort(() => Math.random() - 0.5); }
 
 const MAX_PATTERN_UPLOAD_SIZE = 20 * 1024 * 1024;
 
@@ -190,7 +179,7 @@ function mapBackendCardToProposal(card: ProposalCardResponse): Proposal {
     letter: card.directionLetter,
     name: card.directionName,
     positioning: card.positioning,
-    effectImage: coverUrl || DIR_TEMPLATES[card.selectedDirectionCode].effectImage,
+    effectImage: coverUrl || '',
     suitableFor: card.suitableFor ?? [],
     budget: card.estimatedPrice,
     rightsStatus: 'available',
@@ -221,7 +210,7 @@ function mapBackendCardToProposal(card: ProposalCardResponse): Proposal {
     lockedPattern: {
       id: card.selectedStyleImageId ?? `${card.proposalId}_locked`,
       name: card.selectedStyleName ?? direction.name,
-      imageUrl: coverUrl || DIR_TEMPLATES[card.selectedDirectionCode].effectImage,
+      imageUrl: coverUrl || '',
       source: 'ai',
       sourceLabel: 'AI 子风格图',
     },
@@ -253,6 +242,20 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
   );
 }
 
+function DirectionImagePlaceholder({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-2 px-4 text-center"
+      style={{ background:'rgba(26,61,74,0.04)' }}>
+      <div className="w-10 h-10 rounded-2xl flex items-center justify-center"
+        style={{ background:'rgba(26,61,74,0.08)' }}>
+        <Package className="w-5 h-5 text-[#9B9590]" />
+      </div>
+      <p className="text-xs text-[#1A3D4A]" style={{ fontWeight:600 }}>{title}</p>
+      <p className="text-[10px] text-[#9B9590]">{subtitle}</p>
+    </div>
+  );
+}
+
 // ── Pattern Confirm Modal (redesigned) ────────────────────────────────────────
 
 function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: {
@@ -267,44 +270,34 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
   const [selSlot, setSelSlot] = useState<number | null>(null);
   const [selUploadId, setSelUploadId] = useState<string | null>(null);
   const [uploadedPatterns, setUploadedPatterns] = useState<UploadedPattern[]>([]);
-  const [combineFile, setCombineFile] = useState<UploadedPattern | null>(null);
-  const [uploadingMode, setUploadingMode] = useState<'upload' | 'combined' | null>(null);
+  const [uploadingMode, setUploadingMode] = useState<'upload' | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
-  const combineInputRef = useRef<HTMLInputElement>(null);
 
   const SRCS: Array<{ key: PatternSource; label: string; icon: ReactNode }> = [
     { key:'ai',       label:'智绘AI生成',   icon:<Cpu      className="w-3.5 h-3.5" /> },
     { key:'upload',   label:'自主上传',     icon:<Upload   className="w-3.5 h-3.5" /> },
-    { key:'combined', label:'AI+自传融合',  icon:<GitMerge className="w-3.5 h-3.5" /> },
   ];
 
-  const runGenerate = useCallback(async () => {
-    setSelSlot(null);
-    setSlots([0,1,2,3].map(i => ({ idx:i, url:'', name:'', loading:true })));
-    await new Promise(r => setTimeout(r, 1400));
-    const pool = shufflePool().filter(p => p.url !== direction.effectImage);
-    // Slot 0 始终与方向卡片图案保持一致（问题5）
-    const slot0: ImageSlot = { idx:0, url:direction.effectImage, name:direction.name, loading:false };
-    const rest  = pool.slice(0,3).map((p,i) => ({ idx:i+1, url:p.url, name:p.name, loading:false }));
-    setSlots([slot0, ...rest]);
-    setSelSlot(0); // 默认选中第一张
+  const runGenerate = useCallback(() => {
+    if (!direction.effectImage) {
+      setSlots([]);
+      setSelSlot(null);
+      return;
+    }
+    setSlots([{ idx:0, url:direction.effectImage, name:direction.name, loading:false }]);
+    setSelSlot(0);
   }, [direction]);
 
   useEffect(() => {
-    if (source === 'ai') { runGenerate(); }
-    if (source === 'combined' && combineFile) { runGenerate(); }
-    if (source !== 'ai' && source !== 'combined') setSlots([]);
-  }, [source, combineFile]);
+    if (source === 'ai') {
+      runGenerate();
+      return;
+    }
+    setSlots([]);
+    setSelSlot(null);
+  }, [source, runGenerate]);
 
-  const regenOne = async (idx: number) => {
-    setSlots(p => p.map(s => s.idx === idx ? { ...s, loading:true } : s));
-    if (selSlot === idx) setSelSlot(null);
-    await new Promise(r => setTimeout(r, 900));
-    const pick = shufflePool().find(p => !slots.find(s => s.url === p.url && s.idx !== idx)) ?? shufflePool()[0];
-    setSlots(p => p.map(s => s.idx === idx ? { ...s, url:pick.url, name:pick.name, loading:false } : s));
-  };
-
-  const handlePatternUpload = useCallback(async (file: File, mode: 'upload' | 'combined') => {
+  const handlePatternUpload = useCallback(async (file: File) => {
     if (!isSupportedPatternFile(file)) {
       toast.error('仅支持 PNG、JPG、SVG、WEBP 图片文件');
       return;
@@ -314,7 +307,7 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
       return;
     }
 
-    setUploadingMode(mode);
+    setUploadingMode('upload');
     try {
       const fileId = await uploadFile(file);
       const nextPattern: UploadedPattern = {
@@ -322,18 +315,14 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
         url: proposalFileUrl(fileId),
         name: file.name,
       };
-      if (mode === 'combined') {
-        setCombineFile(nextPattern);
-      } else {
-        setUploadedPatterns(prev => [nextPattern, ...prev.filter(item => item.id !== nextPattern.id)]);
-        setSelUploadId(nextPattern.id);
-      }
+      setUploadedPatterns(prev => [nextPattern, ...prev.filter(item => item.id !== nextPattern.id)]);
+      setSelUploadId(nextPattern.id);
       toast.success(`已上传「${file.name}」`);
     } catch (error) {
       const message = error instanceof Error ? error.message : '上传失败';
       toast.error('图案上传失败', { description: message });
     } finally {
-      setUploadingMode(current => current === mode ? null : current);
+      setUploadingMode(null);
     }
   }, []);
 
@@ -341,8 +330,7 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
 
   const canConfirm =
     (source === 'ai' && selSlot !== null && slots[selSlot] && !slots[selSlot].loading) ||
-    (source === 'upload' && selectedUpload !== null) ||
-    (source === 'combined' && selSlot !== null && combineFile && slots[selSlot] && !slots[selSlot].loading);
+    (source === 'upload' && selectedUpload !== null);
 
   const handleConfirm = () => {
     if (!canConfirm) return;
@@ -403,91 +391,46 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
           </div>
 
           {/* ── AI generated: 2×2 grid ─── */}
-          {(source === 'ai' || (source === 'combined' && combineFile)) && (
+      {source === 'ai' && (
             <div>
-              {source === 'combined' && combineFile && (
-                <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl"
-                  style={{ background:'rgba(107,79,138,0.06)', border:'1px solid rgba(107,79,138,0.15)' }}>
-                  <ProtectedImage src={combineFile.url} alt="" className="w-8 h-8 rounded-lg object-cover" />
-                  <div>
-                    <p className="text-xs text-[#6B4F8A]" style={{ fontWeight:500 }}>已上传：{combineFile.name}</p>
-                    <p className="text-[10px] text-[#9B9590]">以下为与智绘AI融合生成的结果</p>
-                  </div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] text-[#9B9590] uppercase tracking-widest">选择纹样 · 点击选中</p>
+              </div>
+              {slots.length === 0 ? (
+                <div className="rounded-2xl overflow-hidden aspect-square" style={{ border:'1px solid rgba(26,61,74,0.08)' }}>
+                  <DirectionImagePlaceholder title="暂无可选纹样" subtitle="当前没有可用预览，可改用自主上传" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2.5">
+                  {slots.map(slot => (
+                    <div key={slot.idx} className="relative rounded-xl overflow-hidden aspect-square group cursor-pointer"
+                      onClick={() => !slot.loading && setSelSlot(slot.idx)}
+                      style={{ border: selSlot === slot.idx ? `2.5px solid ${cfg.color}` : '2.5px solid transparent', boxShadow: selSlot === slot.idx ? `0 2px 12px ${cfg.color}40` : 'none' }}>
+                      {slot.loading ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-2"
+                          style={{ background:'rgba(26,61,74,0.05)' }}>
+                          <Loader2 className="w-6 h-6 text-[#C4912A] animate-spin" />
+                          <p className="text-[10px] text-[#9B9590]">生成中...</p>
+                        </div>
+                      ) : (
+                        <>
+                          <ProtectedImage src={slot.url} alt={slot.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                          <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 50%)' }} />
+                          <div className="absolute bottom-0 left-0 right-0 px-2 pb-1.5">
+                            <p className="text-[11px] text-white truncate" style={{ fontWeight:500, textShadow:'0 1px 3px rgba(0,0,0,0.5)' }}>{slot.name}</p>
+                          </div>
+                          {selSlot === slot.idx && (
+                            <div className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center"
+                              style={{ background:cfg.color }}>
+                              <Check className="w-3.5 h-3.5 text-white" />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] text-[#9B9590] uppercase tracking-widest">选择纹样 · 点击选中，可单图重新生成</p>
-                <button onClick={runGenerate} className="flex items-center gap-1 text-[10px] text-[#1A3D4A] hover:text-[#C4912A] transition-all">
-                  <RefreshCw className="w-3 h-3" /> 全部重新生成
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                {slots.map(slot => (
-                  <div key={slot.idx} className="relative rounded-xl overflow-hidden aspect-square group cursor-pointer"
-                    onClick={() => !slot.loading && setSelSlot(slot.idx)}
-                    style={{ border: selSlot === slot.idx ? `2.5px solid ${cfg.color}` : '2.5px solid transparent', boxShadow: selSlot === slot.idx ? `0 2px 12px ${cfg.color}40` : 'none' }}>
-                    {slot.loading ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center gap-2"
-                        style={{ background:'rgba(26,61,74,0.05)' }}>
-                        <Loader2 className="w-6 h-6 text-[#C4912A] animate-spin" />
-                        <p className="text-[10px] text-[#9B9590]">生成中...</p>
-                      </div>
-                    ) : (
-                      <>
-                        <ProtectedImage src={slot.url} alt={slot.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-                        <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 50%)' }} />
-                        <div className="absolute bottom-0 left-0 right-0 px-2 pb-1.5">
-                          <p className="text-[11px] text-white truncate" style={{ fontWeight:500, textShadow:'0 1px 3px rgba(0,0,0,0.5)' }}>{slot.name}</p>
-                        </div>
-                        {/* Re-generate button */}
-                        <button onClick={e => { e.stopPropagation(); regenOne(slot.idx); }}
-                          className="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-                          style={{ background:'rgba(255,255,255,0.88)', backdropFilter:'blur(4px)' }}
-                          title="重新生成此图">
-                          <RefreshCw className="w-3.5 h-3.5 text-[#1A3D4A]" />
-                        </button>
-                        {selSlot === slot.idx && (
-                          <div className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center"
-                            style={{ background:cfg.color }}>
-                            <Check className="w-3.5 h-3.5 text-white" />
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── Combined: upload zone first ─── */}
-          {source === 'combined' && !combineFile && (
-            <div>
-              <p className="text-xs text-[#6B4F8A] mb-3">先上传您的自有图案，再与智绘AI融合生成</p>
-              <button onClick={() => combineInputRef.current?.click()} disabled={uploadingMode === 'combined'}
-                className="w-full border-2 border-dashed rounded-2xl p-6 flex flex-col items-center gap-2 transition-all"
-                style={{ borderColor:'rgba(107,79,138,0.3)', background:'rgba(107,79,138,0.03)', cursor:uploadingMode === 'combined'?'not-allowed':'pointer' }}>
-                {uploadingMode === 'combined' ? (
-                  <><Loader2 className="w-7 h-7 text-[#6B4F8A] animate-spin" /><p className="text-xs text-[#6B4F8A]">上传中...</p></>
-                ) : (
-                  <><Upload className="w-7 h-7 text-[#9B9590]" />
-                  <p className="text-sm text-[#6B6558]">点击上传自有图案</p>
-                  <p className="text-[10px] text-[#9B9590]">支持 PNG / JPG / SVG · 最大 20MB</p></>
-                )}
-              </button>
-              <input
-                ref={combineInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    void handlePatternUpload(file, 'combined');
-                  }
-                  e.target.value = '';
-                }}
-              />
             </div>
           )}
 
@@ -520,7 +463,7 @@ function PatternConfirmModal({ direction, onConfirm, onClose, hasReplacement }: 
                 onChange={e => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    void handlePatternUpload(file, 'upload');
+                    void handlePatternUpload(file);
                   }
                   e.target.value = '';
                 }}
@@ -589,6 +532,7 @@ function DirectionCard({ dir, isSelected, onSelect, onUnlock, onZoom, confirmedI
 }) {
   const cfg = DIR_CFG[dir.type];
   const displayImage = isSelected && confirmedImageUrl ? confirmedImageUrl : dir.effectImage;
+  const canZoom = !!displayImage;
 
   return (
     <motion.div
@@ -610,17 +554,25 @@ function DirectionCard({ dir, isSelected, onSelect, onUnlock, onZoom, confirmedI
       </div>
 
       {/* Image — 显示锁定纹样（问题5/6） */}
-      <div className="relative overflow-hidden group cursor-zoom-in" style={{ height: 160 }} onClick={() => onZoom(displayImage)}>
-        <ProtectedImage src={displayImage} alt={dir.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.52) 0%, transparent 55%)' }} />
-        <div className="absolute bottom-0 left-0 right-0 px-3 pb-2.5">
-          <p className="text-white text-sm truncate" style={{ fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{dir.name}</p>
-        </div>
-        <button onClick={e => { e.stopPropagation(); onZoom(displayImage); }}
-          className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-          style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(4px)' }}>
-          <ZoomIn className="w-3.5 h-3.5 text-[#1A3D4A]" />
-        </button>
+      <div className={`relative overflow-hidden group ${canZoom ? 'cursor-zoom-in' : ''}`}
+        style={{ height: 160 }}
+        onClick={canZoom ? () => onZoom(displayImage) : undefined}>
+        {displayImage ? (
+          <>
+            <ProtectedImage src={displayImage} alt={dir.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.52) 0%, transparent 55%)' }} />
+            <div className="absolute bottom-0 left-0 right-0 px-3 pb-2.5">
+              <p className="text-white text-sm truncate" style={{ fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{dir.name}</p>
+            </div>
+            <button onClick={e => { e.stopPropagation(); onZoom(displayImage); }}
+              className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+              style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(4px)' }}>
+              <ZoomIn className="w-3.5 h-3.5 text-[#1A3D4A]" />
+            </button>
+          </>
+        ) : (
+          <DirectionImagePlaceholder title={dir.name} subtitle="当前没有可用预览" />
+        )}
         {isSelected && (
           <div className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full flex items-center justify-center" style={{ background: cfg.color }}>
             <Check className="w-3.5 h-3.5 text-white" />
@@ -719,6 +671,8 @@ function ConfirmedDirectionCard({ dir, pattern, onZoom }: {
     pending:   { color:'#C4912A', bg:'rgba(196,145,42,0.08)', label:'部分纹样待确权', dot:'#C4912A' },
     custom:    { color:'#6B6558', bg:'rgba(107,101,88,0.08)', label:'需定制授权',     dot:'#6B6558' },
   }[dir.rightsStatus];
+  const previewImage = pattern.imageUrl || dir.effectImage;
+  const canZoom = !!previewImage;
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ border:`1.5px solid ${cfg.color}28`, background:'white', boxShadow:`0 6px 32px ${cfg.color}12` }}>
@@ -735,18 +689,27 @@ function ConfirmedDirectionCard({ dir, pattern, onZoom }: {
       {/* Body: two-column */}
       <div className="flex">
         {/* Left: effect image */}
-        <div className="relative group flex-shrink-0 cursor-zoom-in" style={{ width:240 }} onClick={() => onZoom(dir.effectImage)}>
-          <ProtectedImage src={dir.effectImage} alt={dir.name} className="w-full object-cover" style={{ height:240 }} />
-          <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(13,37,53,0.4) 0%, transparent 50%)' }} />
-          <button onClick={() => onZoom(dir.effectImage)}
-            className="absolute bottom-3 right-3 w-8 h-8 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-            style={{ background:'rgba(255,255,255,0.88)', backdropFilter:'blur(4px)' }}>
-            <ZoomIn className="w-3.5 h-3.5 text-[#1A3D4A]" />
-          </button>
-          {/* Image label overlay */}
-          <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
-            <p className="text-white text-xs" style={{ fontWeight:600, textShadow:'0 1px 4px rgba(0,0,0,0.5)' }}>{dir.name}</p>
-          </div>
+        <div className={`relative group flex-shrink-0 ${canZoom ? 'cursor-zoom-in' : ''}`}
+          style={{ width:240 }}
+          onClick={canZoom ? () => onZoom(previewImage) : undefined}>
+          {previewImage ? (
+            <>
+              <ProtectedImage src={previewImage} alt={dir.name} className="w-full object-cover" style={{ height:240 }} />
+              <div className="absolute inset-0" style={{ background:'linear-gradient(to top, rgba(13,37,53,0.4) 0%, transparent 50%)' }} />
+              <button onClick={() => onZoom(previewImage)}
+                className="absolute bottom-3 right-3 w-8 h-8 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                style={{ background:'rgba(255,255,255,0.88)', backdropFilter:'blur(4px)' }}>
+                <ZoomIn className="w-3.5 h-3.5 text-[#1A3D4A]" />
+              </button>
+              <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
+                <p className="text-white text-xs" style={{ fontWeight:600, textShadow:'0 1px 4px rgba(0,0,0,0.5)' }}>{dir.name}</p>
+              </div>
+            </>
+          ) : (
+            <div style={{ height:240 }}>
+              <DirectionImagePlaceholder title={dir.name} subtitle="当前没有可用预览" />
+            </div>
+          )}
         </div>
 
         {/* Right: direction info */}
@@ -1091,8 +1054,8 @@ function LegacyCreateWizard({ clients, onAddClient, onDeleteClient, getClientPro
     };
 
     const dirs: Direction[] = (['safe','cultural','surprise'] as DirectionType[]).map(type => ({
-      id:`gen_${type}_${Date.now()}`, type, typeLabel:DIR_TEMPLATES[type].typeLabel, letter:DIR_TEMPLATES[type].letter,
-      name:names[type], positioning:positions[type], effectImage:DIR_TEMPLATES[type].effectImage,
+      id:`gen_${type}_${Date.now()}`, type, typeLabel:DIRECTION_META[type].typeLabel, letter:DIRECTION_META[type].letter,
+      name:names[type], positioning:positions[type], effectImage:'',
       suitableFor: etp ? [etp] : [],
       budget: calcPrice(type),
       rightsStatus:type==='safe' ? 'available' : type==='cultural' ? 'pending' : 'custom' as const,
@@ -2321,25 +2284,34 @@ function ProposalCard({ proposal, onEdit, onDelete }: {
       style={{ background: 'white', border: '1px solid rgba(26,61,74,0.09)', boxShadow: '0 1px 6px rgba(26,61,74,0.06)' }}
     >
       {/* Image header — compact */}
-      {dir && (
-        <div className="relative overflow-hidden group cursor-zoom-in" style={{ height: 120 }} onClick={() => setLightboxUrl(dir.effectImage)}>
-          <ProtectedImage src={dir.effectImage} alt={dir.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.78) 0%, rgba(13,37,53,0.1) 55%, transparent 100%)' }} />
-          {/* Direction type badge top-left */}
-          <span className="absolute top-2.5 left-2.5 text-[10px] px-2 py-0.5 rounded-full"
-            style={{ background: cfg.color, color: 'white', fontWeight: 600, backdropFilter: 'blur(2px)' }}>{dir.typeLabel}</span>
-          {/* Direction name bottom-left */}
-          <p className="absolute bottom-2.5 left-2.5 right-10 text-white text-xs truncate" style={{ fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{dir.name}</p>
-          {/* Zoom button bottom-right */}
-          <button
-            onClick={e => { e.stopPropagation(); setLightboxUrl(dir.effectImage); }}
-            className="absolute bottom-2 right-2 w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-            style={{ background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(4px)' }}
-            title="放大查看">
-            <ZoomIn className="w-3 h-3 text-[#1A3D4A]" />
-          </button>
-        </div>
-      )}
+      {dir && (() => {
+        const previewImage = proposal.lockedPattern?.imageUrl || dir.effectImage;
+        const canZoom = !!previewImage;
+        return (
+          <div className={`relative overflow-hidden group ${canZoom ? 'cursor-zoom-in' : ''}`}
+            style={{ height: 120 }}
+            onClick={canZoom ? () => setLightboxUrl(previewImage) : undefined}>
+            {previewImage ? (
+              <>
+                <ProtectedImage src={previewImage} alt={dir.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(13,37,53,0.78) 0%, rgba(13,37,53,0.1) 55%, transparent 100%)' }} />
+                <span className="absolute top-2.5 left-2.5 text-[10px] px-2 py-0.5 rounded-full"
+                  style={{ background: cfg.color, color: 'white', fontWeight: 600, backdropFilter: 'blur(2px)' }}>{dir.typeLabel}</span>
+                <p className="absolute bottom-2.5 left-2.5 right-10 text-white text-xs truncate" style={{ fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{dir.name}</p>
+                <button
+                  onClick={e => { e.stopPropagation(); setLightboxUrl(previewImage); }}
+                  className="absolute bottom-2 right-2 w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                  style={{ background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(4px)' }}
+                  title="放大查看">
+                  <ZoomIn className="w-3 h-3 text-[#1A3D4A]" />
+                </button>
+              </>
+            ) : (
+              <DirectionImagePlaceholder title={dir.name} subtitle="当前没有可用预览" />
+            )}
+          </div>
+        );
+      })()}
 
       {/* Body */}
       <div className="px-3 pt-2.5 pb-3">

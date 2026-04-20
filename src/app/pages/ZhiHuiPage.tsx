@@ -390,6 +390,7 @@ const TASK_PHASE_LABELS: Record<string, string> = {
 
 const TASK_EVENT_LABELS: Record<string, string> = {
   'queue.updated': '队列更新',
+  'session.title.updated': '会话标题更新',
   'task.phase': '阶段切换',
   'message.delta': '文本增量',
   'message.completed': '文本完成',
@@ -756,6 +757,38 @@ export function ZhiHuiPage() {
 
   const formatTaskEvent = (eventType?: string | null) =>
     eventType ? TASK_EVENT_LABELS[eventType] || eventType : '';
+
+  const applySessionTitleUpdate = useCallback((sessionId?: string | null, title?: string | null) => {
+    const normalizedSessionId = sessionId?.trim();
+    const normalizedTitle = title?.trim();
+    if (!normalizedSessionId || !normalizedTitle) {
+      return;
+    }
+
+    setSessions(prev => {
+      const matchIndex = prev.findIndex(session => session.id === normalizedSessionId);
+      if (matchIndex === -1) {
+        const now = new Date().toISOString();
+        return [{
+          id: normalizedSessionId,
+          title: normalizedTitle,
+          category: selectedCategory,
+          time: formatSessionTime(now),
+          group: resolveSessionGroup(now),
+        }, ...prev];
+      }
+      if (prev[matchIndex].title === normalizedTitle) {
+        return prev;
+      }
+
+      const next = [...prev];
+      next[matchIndex] = {
+        ...next[matchIndex],
+        title: normalizedTitle,
+      };
+      return next;
+    });
+  }, [selectedCategory]);
 
   const formatConnectionState = (state?: SSEConnectionState | null, message?: string | null) => {
     if (!state) return '';
@@ -1552,6 +1585,11 @@ export function ZhiHuiPage() {
     const streamCursor = msg.id || msg.streamId || null;
     if (streamCursor) {
       updateLastEventId(streamCursor);
+    }
+
+    if (msg.type === 'session.title.updated') {
+      applySessionTitleUpdate(msg.sessionId || currentSessionIdRef.current, msg.title);
+      return;
     }
 
     const runtimePatch: Partial<RuntimeState> = {

@@ -74,6 +74,7 @@ export interface TaskSnapshot {
 // SSE 事件
 export type SSEEventType =
   | 'queue.updated'
+  | 'session.title.updated'
   | 'task.phase'
   | 'message.delta'
   | 'message.completed'
@@ -108,6 +109,8 @@ export interface SSEMessage {
   requestId?: string;
   serviceType?: string;
   remoteTaskId?: string;
+  // session.title.updated
+  title?: string;
   // task.phase
   phase?: string;
   // message.delta / message.completed
@@ -404,6 +407,7 @@ export const chatService = {
           requestId: parsed.requestId ? String(parsed.requestId) : undefined,
           serviceType: parsed.serviceType ? String(parsed.serviceType) : undefined,
           remoteTaskId: parsed.remoteTaskId ? String(parsed.remoteTaskId) : undefined,
+          title: parsed.title ? String(parsed.title) : undefined,
           message: parsed.message ? String(parsed.message) : undefined,
         };
 
