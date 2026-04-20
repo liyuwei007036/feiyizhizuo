@@ -335,13 +335,14 @@ const initialNotifications: Notification[] = [
 ];
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const sessionUser = readAuthSession().user;
   const [language, setLanguage] = useState<Language>('zh');
   const [userRole, setUserRole] = useState<UserRole>('designer');
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
-  const [userPhone, setUserPhone] = useState('13800000001');
-  const [userName, setUserName] = useState('张三');
+  const [userPhone, setUserPhone] = useState(sessionUser?.account || '13800000001');
+  const [userName, setUserName] = useState(sessionUser?.displayName || '张三');
   const [myPatterns, setMyPatterns] = useState<MyPattern[]>(INITIAL_MY_PATTERNS);
   const [myPatternsLoading, setMyPatternsLoading] = useState(false);
   const [persistentClients, setPersistentClients] = useState<CopilotClient[]>(INITIAL_CLIENTS);
@@ -442,6 +443,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMyPatternsLoading(false);
     });
   }, [reloadMyPatterns]);
+
+  useEffect(() => {
+    return subscribeAuthSession(snapshot => {
+      if (!snapshot.user) {
+        return;
+      }
+
+      setUserPhone(snapshot.user.account || '13800000001');
+      setUserName(snapshot.user.displayName || snapshot.user.account || '张三');
+    });
+  }, []);
 
   const addCopilotProposal = useCallback((proposal: CopilotProposal) => {
     setCopilotProposals(prev => {

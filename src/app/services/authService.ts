@@ -10,6 +10,8 @@ import {
 import { requestJson, type ApiResponse } from './httpClient';
 
 const API_BASE = '/api';
+export const DEFAULT_AUTO_LOGIN_ACCOUNT = '18571593801';
+export const DEFAULT_AUTO_LOGIN_PASSWORD = '123456';
 
 interface LoginRequest {
   account: string;    // 账号或手机号
@@ -49,6 +51,12 @@ export const authService = {
     persistAuthSession(response.data);
     return response;
   },
+
+  loginWithDefaultAccount: () =>
+    authService.login({
+      account: DEFAULT_AUTO_LOGIN_ACCOUNT,
+      password: DEFAULT_AUTO_LOGIN_PASSWORD,
+    }),
 
   // 发送验证码
   sendCode: (data: SendCodeRequest) =>

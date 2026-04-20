@@ -164,6 +164,58 @@ function Watermark({ text }: { text: string }) {
   );
 }
 
+function AuthState({
+  title,
+  description,
+  mode,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  description: string;
+  mode: 'loading' | 'error';
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  const isLoading = mode === 'loading';
+
+  return (
+    <div className="relative z-10 flex flex-1 items-center justify-center p-8">
+      <div
+        className="w-full max-w-md bg-white p-8 text-center shadow-lg rounded-lg"
+        style={{ border: '1px solid rgba(26,61,74,0.1)' }}
+      >
+        <div
+          className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg"
+          style={{ background: isLoading ? 'rgba(26,61,74,0.07)' : 'rgba(139,32,32,0.07)' }}
+        >
+          {isLoading ? (
+            <span
+              className="h-6 w-6 animate-spin rounded-full border-2 border-[#1A3D4A]/20 border-t-[#1A3D4A]"
+              aria-hidden="true"
+            />
+          ) : (
+            <AlertCircle className="h-6 w-6 text-[#8B2020]" />
+          )}
+        </div>
+        <h2 className="mb-2 text-lg text-[#1A3D4A]" style={{ fontWeight: 600 }}>
+          {title}
+        </h2>
+        <p className="text-sm leading-relaxed text-[#6B6558]">{description}</p>
+        {actionLabel && onAction ? (
+          <button
+            onClick={onAction}
+            className="mt-6 rounded-lg px-5 py-2 text-sm text-white"
+            style={{ background: 'linear-gradient(135deg, #1A3D4A, #2A5568)' }}
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 // ── User Settings Panel ───────────────────────────────────────────────────────
 
 function UserSettingsPanel({ onClose }: { onClose: () => void }) {
@@ -506,15 +558,15 @@ function UserSettingsPanel({ onClose }: { onClose: () => void }) {
               onClose();
               try {
                 await logout();
-                toast.success('已退出登录');
+                toast.success('已恢复默认账号会话');
               } catch (e) {
-                toast.error('退出失败');
+                toast.error('默认账号会话恢复失败');
               }
-              navigate('/login');
+              navigate('/zhihui', { replace: true });
             }}
-            className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all text-red-600 hover:bg-red-50"
-            style={{ border: '1px solid rgba(239,68,68,0.18)' }}>
-            <LogOut className="w-4 h-4" /> 退出登录
+            className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all text-[#1A3D4A] hover:bg-[rgba(26,61,74,0.04)]"
+            style={{ border: '1px solid rgba(26,61,74,0.12)' }}>
+            <LogOut className="w-4 h-4" /> 重置会话
           </button>
         </div>
       </motion.div>
@@ -524,13 +576,14 @@ function UserSettingsPanel({ onClose }: { onClose: () => void }) {
 
 export function AppLayout({ children }: { children?: React.ReactNode }) {
   const { userRole, setUserRole, unreadCount, redDots, clearRedDot, t, sidebarCollapsed, toggleSidebar, watermarkText, canAccess, userAvatar } = useApp();
+  const { authError, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showUserSettings, setShowUserSettings] = useState(false);
 
   // Auth pages have no sidebar
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
 
   const roleInfo = ROLE_LABELS[userRole];
 
@@ -553,6 +606,29 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
       <div className="flex h-screen overflow-hidden relative" style={{ background: '#F5F0E8' }}>
         <Watermark text={watermarkText} />
         {children}
+      </div>
+    );
+  }
+
+  if (isLoading || !isAuthenticated) {
+    return (
+      <div className="flex h-screen overflow-hidden relative" style={{ background: '#F5F0E8' }}>
+        <Watermark text={watermarkText} />
+        {authError ? (
+          <AuthState
+            mode="error"
+            title="默认账号连接失败"
+            description={authError}
+            actionLabel="重新加载"
+            onAction={() => window.location.reload()}
+          />
+        ) : (
+          <AuthState
+            mode="loading"
+            title="正在连接默认账号"
+            description="系统正在自动接入 18571593801，完成后会直接进入工作区。"
+          />
+        )}
       </div>
     );
   }

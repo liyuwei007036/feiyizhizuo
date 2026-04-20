@@ -1,5 +1,5 @@
 import React from 'react';
-import { createBrowserRouter, Outlet, useRouteError } from 'react-router';
+import { Navigate, createBrowserRouter, Outlet, useRouteError } from 'react-router';
 import { AppLayout } from './components/layout/AppLayout';
 import { ZhiHuiPage } from './pages/ZhiHuiPage';
 import { InspirationLibraryPage } from './pages/InspirationLibraryPage';
@@ -9,8 +9,6 @@ import { PatternMarketPage } from './pages/PatternMarketPage';
 import { PermissionGuard } from './components/PermissionGuard';
 import { AppProvider } from './context/AppContext';
 import { AuthProvider } from './context/AuthContext';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
 import type { ModuleKey } from './context/AppContext';
 
 // ── Inline error boundary ─────────────────────────────────────────────────────
@@ -57,6 +55,10 @@ function AuthPages() {
   return <Outlet />;
 }
 
+function LegacyAuthRedirect() {
+  return <Navigate to="/zhihui" replace />;
+}
+
 // ── App pages (with sidebar) ────────────────────────────────────────────────
 function AppPages() {
   return <Outlet />;
@@ -79,16 +81,15 @@ export const router = createBrowserRouter(
         {
           element: <AuthPages />,
           children: [
-            { index: true, element: <LoginPage /> },
-            { path: 'login', element: <LoginPage /> },
-            { path: 'register', element: <RegisterPage /> },
+            { path: 'login', element: <LegacyAuthRedirect /> },
+            { path: 'register', element: <LegacyAuthRedirect /> },
           ],
         },
         // App routes (with sidebar)
         {
           element: <AppPages />,
           children: [
-            { index: true, element: <Guard mod="zhihui" Page={ZhiHuiPage} /> },
+            { index: true, element: <LegacyAuthRedirect /> },
             { path: 'zhihui', element: <Guard mod="zhihui" Page={ZhiHuiPage} /> },
             { path: 'copilot', element: <Guard mod="copilot" Page={DesignCopilotPage} /> },
             { path: 'materials', element: <Guard mod="materials" Page={InspirationLibraryPage} /> },
